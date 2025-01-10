@@ -1,0 +1,8 @@
+{
+    "FSharp.suggestGitignore": false,
+    "files.associations": {
+        "*.ejs": "html",
+        ".fantomasignore": "ignore",
+        "new": "cpp"
+    }
+}
