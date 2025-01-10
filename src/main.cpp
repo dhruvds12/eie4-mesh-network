@@ -3,20 +3,20 @@
 #include "HT_SSD1306Wire.h"
 // #include <string>
 
-// uncomment the following only on one
+// TODO: uncomment the following only on one
 // of the nodes to initiate the pings
-#define INITIATING_NODE
+// #define INITIATING_NODE
 
 // SX1262 has the following connections:
-// NSS pin:   10
-// DIO1 pin:  2
-// NRST pin:  3
-// BUSY pin:  9
-// SX1262 radio = new Module(10, 2, 3, 9);
+// NSS pin:   8
+// DIO1 pin:  14
+// NRST pin:  12
+// BUSY pin:  13
+SX1262 radio = new Module(8, 14, 12, 13);
 
-#define RADIO_BOARD_AUTO
-#include <RadioBoards.h>
-Radio radio = new RadioModule();
+// #define RADIO_BOARD_AUTO
+// #include <RadioBoards.h>
+// Radio radio = new RadioModule();
 
 
 // save transmission states between loops
