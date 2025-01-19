@@ -41,7 +41,8 @@ void setFlag(void)
 }
 
 SSD1306Wire oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED); // addr , freq , i2c group , resolution , rst
-int count = 0;
+int packetsReceived = 0;
+int packetsSent = 0;
 unsigned long lastTransmissionTime = 0;          // Track the last transmission time
 const unsigned long transmissionInterval = 1000; // Set timeout (e.g., 1000 ms = 1 seconds)
 
@@ -146,6 +147,7 @@ void setup()
 
 void loop()
 {
+  unsigned long oneWayLatency = 0;
   // factory_display.drawString(0, 0, "Hello, world!");
   // check if the previous operation finished
   if (operationDone)
@@ -160,7 +162,7 @@ void loop()
       if (transmissionState == RADIOLIB_ERR_NONE)
       {
         // packet was successfully sent
-        Serial.println(F("transmission finished!"));
+        // Serial.println(F("transmission finished!"));
         displayString(0, 40, "transmission finished!");
       }
       else
@@ -180,37 +182,66 @@ void loop()
       // the previous operation was reception
       // print data and send another packet
       // displayString(0, 0, "Waiting for packet ... ");
-      String str;
-      int state = radio.readData(str);
+      String receivedData;
+      int state = radio.readData(receivedData);
       oled_display.clear();
 
       if (state == RADIOLIB_ERR_NONE)
       {
-        count++;
+        int delimiterIndex = receivedData.indexOf(',');
+        if (delimiterIndex != -1)
+        {
+          String msg = receivedData.substring(0, delimiterIndex);
+          String timeStr = receivedData.substring(delimiterIndex + 1);
+          unsigned long sentTime = timeStr.toInt();
+          unsigned long receiveTime = millis();
+          Serial.print("Sent time: ");
+          Serial.println(sentTime);
+          Serial.print("Receive time: ");
+          Serial.println(receiveTime);
+          oneWayLatency = receiveTime - sentTime; // Use or display oneWayLatency
+        }
+        packetsReceived++;
         // packet was successfully received
-        Serial.println(F("[SX1262] Received packet!"));
-        std::string received = "Received packet no: " + std::to_string(count);
+        // Serial.println(F("[SX1262] Received packet!"));
+        std::string received = "Received packet no: " + std::to_string(packetsReceived);
         oled_display.drawString(0, 0, received.c_str());
 
         // print data of the packet
-        Serial.print(F("[SX1262] Data:\t\t"));
-        Serial.println(str);
-        oled_display.drawString(0, 10, str.c_str());
+        // Serial.print(F("[SX1262] Data:\t\t"));
+        // Serial.println(str);
+        oled_display.drawString(0, 10, receivedData.c_str());
 
         // print RSSI (Received Signal Strength Indicator)
-        Serial.print(F("[SX1262] RSSI:\t\t"));
-        Serial.print(radio.getRSSI());
-        Serial.println(F(" dBm"));
+        // Serial.print(F("[SX1262] RSSI:\t\t"));
+        // Serial.print(radio.getRSSI());
+        // Serial.println(F(" dBm"));
         std::string rssi = "RSSI: " + std::to_string(radio.getRSSI()) + " dBm";
 
         oled_display.drawString(0, 20, rssi.c_str());
 
         // print SNR (Signal-to-Noise Ratio)
-        Serial.print(F("[SX1262] SNR:\t\t"));
-        Serial.print(radio.getSNR());
-        Serial.println(F(" dB"));
+        // Serial.print(F("[SX1262] SNR:\t\t"));
+        // Serial.print(radio.getSNR());
+        // Serial.println(F(" dB"));
         std::string snr = "SNR: " + std::to_string(radio.getSNR()) + " dB";
         oled_display.drawString(0, 30, snr.c_str());
+
+
+
+        // data
+        // After each reception (or after each cycle):
+        Serial.print(millis()); // Log local time
+        Serial.print(",");
+        Serial.print(packetsSent);
+        Serial.print(",");
+        Serial.print(packetsReceived);
+        Serial.print(",");
+        Serial.print(radio.getRSSI());
+        Serial.print(",");
+        Serial.print(radio.getSNR());
+        Serial.print(",");
+        Serial.println(oneWayLatency);
       }
       oled_display.display();
 
@@ -219,9 +250,13 @@ void loop()
 
       if (millis() - lastTransmissionTime >= transmissionInterval)
       {
-        Serial.print(F("[SX1262] Sending another packet ... "));
-        transmissionState = radio.startTransmit("Hello World!");
+        // Serial.print(F("[SX1262] Sending another packet ... "));
+        unsigned long sendTime = millis();
+        String payload = String("Hello,") + String(sendTime); // Add timestamp to the payload
+        transmissionState = radio.startTransmit(payload);
         transmitFlag = true;
+
+        packetsSent++;
 
         // Update the last transmission time
         lastTransmissionTime = millis();
