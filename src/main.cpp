@@ -7,11 +7,10 @@
 
 // TODO: uncomment the following only on one
 // of the nodes to initiate the pings
-#define INITIATING_NODE
+// #define INITIATING_NODE
 
 // Initialize DisplayManager with appropriate I2C pins and address
 DisplayManager displayManager;
-
 
 // Create LoRaManager instance with the display reference
 LoRaManager lora(displayManager);
@@ -49,8 +48,8 @@ void setup()
 
 #if defined(INITIATING_NODE)
   // send the first packet on this node
-  
-  lora.initialTransmission("Hello World!");
+
+  lora.transmitSYNC1();
 #else
   // start listening for LoRa packets on this node
   lora.startReceive();

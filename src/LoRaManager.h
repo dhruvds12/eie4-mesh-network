@@ -20,6 +20,16 @@ public:
 
     void update();
 
+    void transmitSYNC1();
+
+    void transmitSYNC2();
+
+    void receiveSYNC1(String timeStr);
+
+    void receiveSYNC2(String timeStr);
+
+    void sendHello();
+
     // Flags
     // bool transmitFlag;
     // static volatile bool operationDone;
@@ -39,6 +49,19 @@ public:
 
         bool transmitFlag     = false; 
         static volatile bool operationDone;
+
+        unsigned long timeSYNC1Sent = 0; //t1
+        unsigned long timeSYNC2Sent = 0; //t3 == t2
+
+        unsigned long timeSYNC1Received = 0; //t2 == t3
+        unsigned long timeSYNC2Received = 0; //t4
+
+        unsigned long timeOffset = 0;
+
+        unsigned long rtt = 0;
+
+        unsigned long twoWayLatency = 0;
+
 };
 
 #endif
