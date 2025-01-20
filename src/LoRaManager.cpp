@@ -286,7 +286,7 @@ void LoRaManager::update()
 
                             // data
                             // After each reception (or after each cycle):
-                            Serial.print(millis()); // Log local time
+                            Serial.print(millis());
                             Serial.print(",");
                             Serial.print(packetsSent);
                             Serial.print(",");
