@@ -24,14 +24,22 @@ int SX1262Config::begin(float freq,
     return radio.begin(freq, bw, sf, cr, syncWord, power, preambleLength);
 }
 
-int SX1262Config::startTransmit(const uint8_t *data, size_t len) {
+int SX1262Config::startTransmit(const uint8_t *data, size_t len)
+{
     return radio.startTransmit(data, len);
 }
 
-
-int SX1262Config::startReceive()
+void SX1262Config::startReceive()
 {
-    return radio.startReceive();
+    int16_t status = radio.startReceive();
+    if (status != RADIOLIB_ERR_NONE)
+    {
+        Serial.print("[SX1262Config] Error starting receive: ");
+        Serial.println(status);
+    }
+    assert(status == RADIOLIB_ERR_NONE);
+
+    return;
 }
 
 int SX1262Config::readData(String &receivedData)
@@ -52,4 +60,16 @@ float SX1262Config::getRSSI()
 float SX1262Config::getSNR()
 {
     return radio.getSNR();
+}
+
+bool SX1262Config::isChannelFree()
+{
+    int result = radio.scanChannel();
+    if (result == RADIOLIB_CHANNEL_FREE)
+    {
+        return true;
+    }
+
+    assert(result != RADIOLIB_ERR_WRONG_MODEM);
+    return false;
 }

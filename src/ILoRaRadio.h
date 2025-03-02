@@ -20,7 +20,7 @@ class ILoRaRadio {
 
       virtual int startTransmit(const uint8_t *data, size_t len) = 0;
 
-      virtual int startReceive() = 0;
+      virtual void startReceive() = 0;
 
       virtual int readData(String &receivedData) = 0;
 
@@ -29,6 +29,8 @@ class ILoRaRadio {
       virtual float getRSSI() = 0;
 
       virtual float getSNR() = 0;
+
+      virtual bool isChannelFree() = 0;
             
 };
 

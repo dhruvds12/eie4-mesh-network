@@ -12,7 +12,8 @@
  *
  * Encapsulates all SX1262-specific initialization and configuration.
  */
-class SX1262Config : public ILoRaRadio {
+class SX1262Config : public ILoRaRadio
+{
 public:
   /**
    * @brief Constructor taking a reference to an SX1262 radio instance.
@@ -25,27 +26,25 @@ public:
    * @return int Returns RADIOLIB_ERR_NONE if successful, or an error code.
    */
   int begin(float freq = 868.0F,
-           float bw = 125.0F,
-           uint8_t sf = 9u,
-           uint8_t cr = 7u,
-           uint8_t syncWord = 18u,
-           int8_t power = 10, 
-           uint16_t preambleLength = 8u,
-           float tcxoVoltage = 1.6F,
-           bool useRegulatorLDO = false) override;
-
-
+            float bw = 125.0F,
+            uint8_t sf = 9u,
+            uint8_t cr = 7u,
+            uint8_t syncWord = 18u,
+            int8_t power = 10,
+            uint16_t preambleLength = 8u,
+            float tcxoVoltage = 1.6F,
+            bool useRegulatorLDO = false) override;
 
   int startTransmit(const uint8_t *data, size_t len) override;
-  int startReceive() override;
+  void startReceive() override;
   int readData(String &receivedData) override;
   void setDio1Callback(void (*callback)()) override;
   float getRSSI() override;
   float getSNR() override;
-
+  bool isChannelFree() override;
 
 private:
-  SX1262 radio;  // Reference to the SX1262 radio instance.
+  SX1262 radio; // Reference to the SX1262 radio instance.
 };
 
 #endif // SX1262_CONFIG_H
