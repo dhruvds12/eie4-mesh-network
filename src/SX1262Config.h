@@ -37,7 +37,16 @@ public:
 
   int startTransmit(const uint8_t *data, size_t len) override;
   void startReceive() override;
-  int readData(String &receivedData) override;
+
+  /**
+   * @brief Provide a pointer to where to store received data and the length of the data.if len is 0, will automatically get packet length
+   * 
+   * 
+   * @param receivedData 
+   * @param len 
+   * @return int 
+   */
+  int readData(String &receivedData, int len = 0) override;
   void setDio1Callback(void (*callback)()) override;
   float getRSSI() override;
   float getSNR() override;

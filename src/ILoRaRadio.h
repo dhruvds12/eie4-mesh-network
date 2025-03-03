@@ -22,7 +22,7 @@ class ILoRaRadio {
 
       virtual void startReceive() = 0;
 
-      virtual int readData(String &receivedData) = 0;
+      virtual int readData(String &receivedData, int len) = 0;
 
       virtual void setDio1Callback(void (*callback)()) = 0;
 

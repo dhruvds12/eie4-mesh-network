@@ -4,64 +4,61 @@
 #include <Arduino.h>
 #include <RadioLib.h>
 #include "DisplayManager.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "ILoRaRadio.h"
 
-class LoRaManager
-{
+class LoRaManager {
 public:
-    LoRaManager(DisplayManager &dispManager);
+    LoRaManager(DisplayManager &dispManager, ILoRaRadio *radioInterface);
 
-    void begin(float freq = (434.0F), float bw = (125.0F), uint8_t sf = (uint8_t)9U, uint8_t cr = (uint8_t)7U, uint8_t syncWord = (uint8_t)18U, int8_t power = (int8_t)10, uint16_t preambleLength = (uint16_t)8U, float tcxoVoltage = (1.6F), bool useRegulatorLDO = false);
+    void begin(float freq = 434.0F, float bw = 125.0F, uint8_t sf = 9U, uint8_t cr = 7U,
+               uint8_t syncWord = 18U, int8_t power = 10, uint16_t preambleLength = 8U,
+               float tcxoVoltage = 1.6F, bool useRegulatorLDO = false);
 
+    // Other methods...
     void initialTransmission(String data);
-
     void startReceive();
-
     int readReceivedData(String &receivedData);
-
     void update();
-
     void transmitSYNC1();
-
     void transmitSYNC2();
-
     void receiveSYNC1(String timeStr);
-
     void receiveSYNC2(String timeStr);
-
     void sendHello();
 
-    // Flags
-    // bool transmitFlag;
-    // static volatile bool operationDone;
+    struct RadioPacket {
+        String payload;
+        int rssi;
+        int snr;
+    };
 
-    private:
-        SX1262 radio;
-        DisplayManager &display;
+    static SemaphoreHandle_t radioSemaphore;
 
-        // Interrupt handler function (moved inside the class)
-        static void setFlag();
-        // State variables
-        int transmissionState = RADIOLIB_ERR_NONE;
-        int packetsSent       = 0;
-        int packetsReceived   = 0;
-        unsigned long lastTransmissionTime = 0;
-        const unsigned long transmissionInterval = 1000; 
+private:
+    // Remove direct SX1262 radio instantiation
+    // Instead, hold a pointer to the configuration module
+    ILoRaRadio *radio;
+    DisplayManager &display;
 
-        bool transmitFlag     = false; 
-        static volatile bool operationDone;
+    // ISR handler
+    static void recievedPacketISR();
 
-        unsigned long timeSYNC1Sent = 0; //t1
-        unsigned long timeSYNC2Sent = 0; //t3 == t2
-
-        unsigned long timeSYNC1Received = 0; //t2 == t3
-        unsigned long timeSYNC2Received = 0; //t4
-
-        unsigned long timeOffset = 0;
-
-        unsigned long rtt = 0;
-
-        unsigned long twoWayLatency = 0;
-
+    // State variables...
+    int transmissionState = RADIOLIB_ERR_NONE;
+    int packetsSent       = 0;
+    int packetsReceived   = 0;
+    unsigned long lastTransmissionTime = 0;
+    const unsigned long transmissionInterval = 1000;
+    bool transmitFlag     = false;
+    static volatile bool operationDone;
+    unsigned long timeSYNC1Sent = 0;
+    unsigned long timeSYNC2Sent = 0;
+    unsigned long timeSYNC1Received = 0;
+    unsigned long timeSYNC2Received = 0;
+    unsigned long timeOffset = 0;
+    unsigned long rtt = 0;
+    unsigned long twoWayLatency = 0;
 };
 
 #endif

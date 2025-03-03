@@ -42,9 +42,9 @@ void SX1262Config::startReceive()
     return;
 }
 
-int SX1262Config::readData(String &receivedData)
+int SX1262Config::readData(String &receivedData, int len)
 {
-    return radio.readData(receivedData);
+    return radio.readData(receivedData, len);
 }
 
 void SX1262Config::setDio1Callback(void (*callback)())
