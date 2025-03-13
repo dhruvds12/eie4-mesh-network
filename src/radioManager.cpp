@@ -217,6 +217,7 @@ void RadioManager::txTask(void *pvParameteres)
         RadioPacket *packet = nullptr;
         if (xQueueReceive(manager->_txQueue, &packet, portMAX_DELAY) == pdTRUE)
         {
+            // TODO why does this not work?
             // while (!manager->_radio->isChannelFree())
             // {
             //     vTaskDelay(pdMS_TO_TICKS(20));
