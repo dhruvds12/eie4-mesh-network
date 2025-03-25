@@ -51,6 +51,7 @@ void VextOFF(void) // Vext default OFF
 
 // Create a global radio driver instance.
 SX1262Config myRadio(8, 14, 12, 13);
+// SX1262Config myRadio(10, 2,3, 9);
 
 // Create the radio manager instance.
 RadioManager radioManager(&myRadio);

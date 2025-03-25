@@ -6,7 +6,7 @@
 SemaphoreHandle_t RadioManager::_irqSemaphore = nullptr;
 
 RadioManager::RadioManager(ILoRaRadio *radio)
-    : _radio(radio), _radioTaskHandle(nullptr), _txTaskHandle(nullptr), _rxQueue(nullptr), _txQueue(nullptr)
+    : _radio(radio), _radioTaskHandle(nullptr), _txTaskHandle(nullptr), _rxQueue(nullptr), _txQueue(nullptr), _isTransmitting(false)
 {
     // If semaphore isn't created yet, create it
     if (_irqSemaphore == nullptr)
@@ -160,9 +160,16 @@ void RadioManager::radioTask(void *pvParameters)
         // Wait until the ISR signals the semaphore
         if (xSemaphoreTake(_irqSemaphore, portMAX_DELAY) == pdTRUE)
         {
-            Serial.println("Received transmission");
-            // We got an interrupt, handle it
-            manager->handleReceiveInterrupt();
+            if (manager->_isTransmitting)
+            {
+                manager->handleTransmissionComplete();
+            }
+            else
+            {
+                Serial.println("Received transmission");
+                // We got an interrupt, handle it
+                manager->handleReceiveInterrupt();
+            }
         }
         // As per docs we do not need to return the semaphore
         // https://www.freertos.org/Documentation/02-Kernel/04-API-references/10-Semaphore-and-Mutexes/17-xSemaphoreGiveFromISR
@@ -185,6 +192,13 @@ void RadioManager::handleReceiveInterrupt()
     if (result == 0) // radiolib not imported equivalent to RADIOLIB_ERR_NONE
     {
         size_t len = received.length();
+        if (len == 0)
+        {
+            Serial.print("Ignore empty");
+            // Likely a false interrupt; just restart receive mode.
+            _radio->startReceive();
+            return;
+        }
         if (len > sizeof(packet->data))
         {
             len = sizeof(packet->data);
@@ -209,6 +223,13 @@ void RadioManager::handleReceiveInterrupt()
     _radio->startReceive();
 }
 
+void RadioManager::handleTransmissionComplete()
+{
+    Serial.println("transmission Complete");
+    _isTransmitting = false;
+    _radio->startReceive();
+}
+
 void RadioManager::txTask(void *pvParameteres)
 {
     RadioManager *manager = reinterpret_cast<RadioManager *>(pvParameteres);
@@ -217,27 +238,34 @@ void RadioManager::txTask(void *pvParameteres)
         RadioPacket *packet = nullptr;
         if (xQueueReceive(manager->_txQueue, &packet, portMAX_DELAY) == pdTRUE)
         {
+
             // TODO why does this not work?
-            // while (!manager->_radio->isChannelFree())
-            // {
-            //     vTaskDelay(pdMS_TO_TICKS(20));
-            // }
-            int status = manager->_radio->startTransmit(packet->data, packet->len);
-            if (status == 0)
+            if (manager->_radio->isChannelFree() == true)
             {
-                Serial.print("[RadioManager] Transmitted Packet: ");
-                Serial.write(packet->data, packet->len);
-                Serial.println();
-                manager->_radio->setDio1Callback(manager->dio1Isr);
+                manager->_isTransmitting = true;
+                int status = manager->_radio->startTransmit(packet->data, packet->len);
+                if (status == 0)
+                {
+                    Serial.print("[RadioManager] Transmitted Packet: ");
+                    Serial.write(packet->data, packet->len);
+                    Serial.println();
+                    // manager->_radio->setDio1Callback(manager->dio1Isr);
+                }
+                else
+                {
+                    Serial.print("[RadioManager] TX failed, code: ");
+                    Serial.println(status);
+                    manager->_isTransmitting = false;
+                    manager->_radio->startReceive();
+                }
+                vPortFree(packet);
             }
             else
             {
-                Serial.print("[RadioManager] TX failed, code: ");
-                Serial.println(status);
-                manager->_radio->startReceive();
+                Serial.println("Channel is busy");
+                // Add item back to queue
+                manager->enqueueTxPacket(packet->data, packet->len);
             }
-            vPortFree(packet);
-            
         }
     }
 }

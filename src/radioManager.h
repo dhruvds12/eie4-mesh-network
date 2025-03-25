@@ -66,6 +66,9 @@ private:
     // Queue for transmit packets
     QueueHandle_t _txQueue;
 
+    // Flag to indicate mode
+    volatile bool _isTransmitting;
+
     // Static ISR callback for DIO1
     static void dio1Isr();
 
@@ -80,6 +83,9 @@ private:
 
     // Helper method to handle a receive interrupt
     void handleReceiveInterrupt();
+
+    // Helper method ot handle the completion of a transmission
+    void handleTransmissionComplete();
 };
 
 #endif // RADIOMANAGER_H
