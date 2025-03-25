@@ -242,17 +242,24 @@ void RadioManager::txTask(void *pvParameteres)
             // TODO why does this not work?
             if (manager->_radio->isChannelFree() == true)
             {
+                /* 
+                TODO: we do some crazy stuff in channelFree ie set radio to standby and remove the Dio1Action
+                      to get the scan channel to work ... is everything being set back correctly .... seems 
+                      to work for now but could cause issues down the line :( ... hope not
+                */
                 manager->_isTransmitting = true;
                 int status = manager->_radio->startTransmit(packet->data, packet->len);
                 if (status == 0)
                 {
+                    manager->_radio->setDio1Callback(manager->dio1Isr);
+
                     Serial.print("[RadioManager] Transmitted Packet: ");
                     Serial.write(packet->data, packet->len);
                     Serial.println();
-                    // manager->_radio->setDio1Callback(manager->dio1Isr);
                 }
                 else
                 {
+                    manager->_radio->setDio1Callback(manager->dio1Isr);
                     Serial.print("[RadioManager] TX failed, code: ");
                     Serial.println(status);
                     manager->_isTransmitting = false;

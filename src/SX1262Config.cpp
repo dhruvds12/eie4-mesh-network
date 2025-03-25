@@ -64,55 +64,28 @@ float SX1262Config::getSNR()
 
 bool SX1262Config::isChannelFree()
 {
-    // int err = radio.standby();
-    // if (err != RADIOLIB_ERR_NONE)
-    // {
-    //     Serial.println("Error in standdy");
-    // }
+    radio.standby();
+    radio.clearDio1Action();
 
-    // assert(err == RADIOLIB_ERR_NONE);
-    // int result = radio.scanChannel();
-    // if (result == RADIOLIB_LORA_DETECTED)
-    // {
-    //     Serial.println("detected traffic");
-    //     return false;
-    // }
+    int16_t state = radio.scanChannel();
 
-    // if (result != RADIOLIB_CHANNEL_FREE)
-    //     Serial.println("Passed RADIOLIB_LORA_DETECTED");
+    if (state == RADIOLIB_LORA_DETECTED)
+    {
+        // LoRa preamble was detected
+        Serial.println(F("detected!"));
+    }
+    else if (state == RADIOLIB_CHANNEL_FREE)
+    {
+        // no preamble was detected, channel is free
+        Serial.println(F("channel is free!"));
+        return true;
+    }
+    else
+    {
+        // some other error occurred
+        Serial.print(F("failed, code "));
+        Serial.println(state);
+    }
 
-    // assert(result != RADIOLIB_ERR_WRONG_MODEM);
-    // Serial.println("no traffic");
-
-    return true;
-
-    // int err = radio.standby();
-    // if (err != RADIOLIB_ERR_NONE)
-    // {
-    //     Serial.print("Error setting standby: ");
-    //     Serial.println(err);
-    //     return false;
-    // }
-
-    // int state = radio.scanChannel();
-
-    // if (state == RADIOLIB_LORA_DETECTED)
-    // {
-    //     // LoRa preamble was detected
-    //     Serial.println(F("detected!"));
-    //     return false;
-    // }
-    // else if (state == RADIOLIB_CHANNEL_FREE)
-    // {
-    //     // no preamble was detected, channel is free
-    //     Serial.println(F("channel is free!"));
-    //     return true;
-    // }
-    // else
-    // {
-    //     // some other error occurred
-    //     Serial.print(F("failed, code "));
-    //     Serial.println(state);
-    //     return false;
-    // }
+    return false;
 }
