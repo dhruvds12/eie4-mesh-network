@@ -40,11 +40,11 @@ public:
 
   /**
    * @brief Provide a pointer to where to store received data and the length of the data.if len is 0, will automatically get packet length
-   * 
-   * 
-   * @param receivedData 
-   * @param len 
-   * @return int 
+   *
+   *
+   * @param receivedData
+   * @param len
+   * @return int
    */
   int readData(String &receivedData, int len = 0) override;
   void setDio1Callback(void (*callback)()) override;

@@ -27,9 +27,9 @@ class AODVRouter
 public:
     /**
      * @brief Construct a new AODVRouter object
-     * 
-     * @param RadioManager 
-     * @param myNodeID 
+     *
+     * @param RadioManager
+     * @param myNodeID
      */
     AODVRouter(RadioManager *RadioManager, uint32_t myNodeID);
 
@@ -41,6 +41,14 @@ public:
      */
     bool begin();
 
+    /**
+     * @brief Function to send data to a desired node, provide the final destination and
+     * next hop handled by router.
+     *
+     * @param destNodeID The final destination (next hop handled by router)
+     * @param data The raw data
+     * @param len The length of the raw data
+     */
     void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
 
 private:
@@ -71,81 +79,82 @@ private:
     void handlePacket(RadioPacket *rxPacket);
 
     /**
-     * @brief 
-     * 
-     * @param base 
-     * @param payload 
-     * @param payloadLen 
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
      */
     void handleRREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
     /**
-     * @brief 
-     * 
-     * @param base 
-     * @param payload 
-     * @param payloadLen 
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
      */
     void handleRREP(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
     /**
-     * @brief 
-     * 
-     * @param base 
-     * @param payload 
-     * @param payloadLen 
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
      */
     void handleRERR(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
     /**
-     * @brief 
-     * 
-     * @param base 
-     * @param payload 
-     * @param payloadLen 
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
      */
     void handleData(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
     // SEND PACKET HELPER FUNCTIONS
 
     /**
-     * @brief 
-     * 
-     * @param destNodeID 
+     * @brief
+     *
+     * @param destNodeID
      */
     void sendRREQ(uint32_t destNodeID);
 
     /**
-     * @brief 
-     * 
-     * @param destNodeID 
-     * @param nextHop 
-     * @param hopCount 
+     * @brief
+     *
+     * @param destNodeID
+     * @param nextHop
+     * @param hopCount
      */
     void sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t nextHop, uint8_t hopCount);
 
     /**
-     * @brief 
-     * 
-     * @param brokenNodeID 
-     * @param originalDest 
-     * @param originalPacketID 
+     * @brief
+     *
+     * @param brokenNodeID
+     * @param senderNodeID
+     * @param originalDest
+     * @param originalPacketID
      */
-    void sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID ,uint32_t originalDest, uint32_t originalPacketID);
+    void sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID);
 
     /**
-     * @brief 
-     * 
-     * @param header 
-     * @param extHeader 
-     * @param extLen 
-     * @param payload 
-     * @param payloadLen 
+     * @brief
+     *
+     * @param header
+     * @param extHeader
+     * @param extLen
+     * @param payload
+     * @param payloadLen
      */
     void transmitPacket(const BaseHeader &header, const uint8_t *extHeader, size_t extLen,
-         const uint8_t *payload = nullptr, size_t payloadLen = 0);
+                        const uint8_t *payload = nullptr, size_t payloadLen = 0);
 
-    //  ROUTING TABLE HELPER FUNCTIONS 
+    //  ROUTING TABLE HELPER FUNCTIONS
     void updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hopCount);
     bool hasRoute(uint32_t destination);
     RouteEntry getRoute(uint32_t destination);

@@ -12,13 +12,14 @@
  * This task blocks on the RX queue from the RadioManager.
  * If it sees a "PING", it enqueues a "PONG" response into the TX queue.
  */
-class PingPongRouter {
+class PingPongRouter
+{
 public:
     /**
      * @brief Construct a new Ping Pong Router object.
      * @param radioManager A pointer to the RadioManager that owns the RX/TX queues.
      */
-    PingPongRouter(RadioManager* radioManager);
+    PingPongRouter(RadioManager *radioManager);
 
     /**
      * @brief Initialize and create the router task.
@@ -27,11 +28,11 @@ public:
     bool begin();
 
 private:
-    RadioManager* _radioManager;
+    RadioManager *_radioManager;
     TaskHandle_t _routerTaskHandle;
 
     // The router task function.
-    static void routerTask(void* pvParameters);
+    static void routerTask(void *pvParameters);
 };
 
 #endif // PINGPONGROUTER_H

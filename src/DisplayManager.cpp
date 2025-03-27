@@ -1,7 +1,8 @@
 #include "DisplayManager.h"
 
-DisplayManager::DisplayManager() 
-  : oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED) {
+DisplayManager::DisplayManager()
+    : oled_display(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED)
+{
 }
 
 void DisplayManager::initialise()

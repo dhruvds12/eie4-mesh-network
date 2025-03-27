@@ -242,9 +242,9 @@ void RadioManager::txTask(void *pvParameteres)
             // TODO why does this not work?
             if (manager->_radio->isChannelFree() == true)
             {
-                /* 
+                /*
                 TODO: we do some crazy stuff in channelFree ie set radio to standby and remove the Dio1Action
-                      to get the scan channel to work ... is everything being set back correctly .... seems 
+                      to get the scan channel to work ... is everything being set back correctly .... seems
                       to work for now but could cause issues down the line :( ... hope not
                 */
                 manager->_isTransmitting = true;
