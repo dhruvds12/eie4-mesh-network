@@ -414,6 +414,41 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
     }
 }
 
+// TRANSMIT PACKET
+void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHeader, size_t extLen,
+                                const uint8_t *payload = nullptr, size_t payloadLen = 0)
+{
+    uint8_t buffer[255];
+    size_t offset = 0;
+    offset += serialiseBaseHeader(header, buffer + offset);
+
+     // Append the extension header, if provided.
+     if (extHeader && extLen > 0) {
+        if (offset + extLen > sizeof(buffer)) {
+            Serial.println("[AODVRouter] transmitPacket buffer overflow with extension header!");
+            return;
+        }
+        memcpy(buffer + offset, extHeader, extLen);
+        offset += extLen;
+    }
+    
+    // Append the payload, if provided.
+    if (payload && payloadLen > 0) {
+        if (offset + payloadLen > sizeof(buffer)) {
+            Serial.println("[AODVRouter] transmitPacket buffer overflow with payload!");
+            return;
+        }
+        memcpy(buffer + offset, payload, payloadLen);
+        offset += payloadLen;
+    }
+    
+    // Now send the complete packet to the radio manager.
+    bool queued = _radioManager->enqueueTxPacket(buffer, offset);
+    if (!queued) {
+        Serial.println("[AODVRouter] transmitPacket could not enqueue!");
+    }
+}
+
 // ROUTING TABLE HELPER FUNCTIONS
 
 void AODVRouter::updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hopCount)
