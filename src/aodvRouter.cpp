@@ -1,7 +1,4 @@
 #include "aodvRouter.h"
-#include <FreeRTOS.h>
-#include <task.h>
-#include <string.h>
 
 static const uint8_t PKT_BROADCAST = 0x01;
 static const uint8_t PKT_RREQ = 0x02;
@@ -422,29 +419,34 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
     size_t offset = 0;
     offset += serialiseBaseHeader(header, buffer + offset);
 
-     // Append the extension header, if provided.
-     if (extHeader && extLen > 0) {
-        if (offset + extLen > sizeof(buffer)) {
+    // Append the extension header, if provided.
+    if (extHeader && extLen > 0)
+    {
+        if (offset + extLen > sizeof(buffer))
+        {
             Serial.println("[AODVRouter] transmitPacket buffer overflow with extension header!");
             return;
         }
         memcpy(buffer + offset, extHeader, extLen);
         offset += extLen;
     }
-    
+
     // Append the payload, if provided.
-    if (payload && payloadLen > 0) {
-        if (offset + payloadLen > sizeof(buffer)) {
+    if (payload && payloadLen > 0)
+    {
+        if (offset + payloadLen > sizeof(buffer))
+        {
             Serial.println("[AODVRouter] transmitPacket buffer overflow with payload!");
             return;
         }
         memcpy(buffer + offset, payload, payloadLen);
         offset += payloadLen;
     }
-    
+
     // Now send the complete packet to the radio manager.
     bool queued = _radioManager->enqueueTxPacket(buffer, offset);
-    if (!queued) {
+    if (!queued)
+    {
         Serial.println("[AODVRouter] transmitPacket could not enqueue!");
     }
 }

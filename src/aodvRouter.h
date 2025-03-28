@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <FreeRTOS.h>
-#include <queue.h>
 #include "IRadioManager.h"
 #include "packet.h"
 #include <map>
