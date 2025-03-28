@@ -12,9 +12,9 @@ struct RadioPacket
 
 /**
  * @brief IRadioManager Interface
- * 
+ *
  * An interface provided for RadioManager used to overwrite functions for testing
- * 
+ *
  */
 class IRadioManager
 {

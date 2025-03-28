@@ -2,7 +2,12 @@
 #define PACKET_H
 
 #include <stdint.h>
+
+#ifndef UNIT_TEST
 #include <Arduino.h>
+#else
+#include <string.h>
+#endif
 
 // Base Header (16 bytes)
 struct BaseHeader

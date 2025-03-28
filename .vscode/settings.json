@@ -55,5 +55,6 @@
     "C_Cpp.inlayHints.autoDeclarationTypes.enabled": true,
     "C_Cpp.inlayHints.parameterNames.enabled": true,
     "C_Cpp.inlayHints.referenceOperator.enabled": true,
-    "C_Cpp.formatting": "clangFormat"
+    "C_Cpp.formatting": "clangFormat",
+    "C_Cpp.default.compilerPath": "C:/msys64/ucrt64/bin/gcc.exe"
 }

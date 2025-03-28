@@ -1,5 +1,43 @@
 #include "AODVRouter.h"
 
+#ifdef UNIT_TEST
+#include <stdlib.h>
+#define pvPortMalloc(size) malloc(size)
+#define vPortFree(ptr) free(ptr)
+
+uint32_t esp_random() {
+    return (uint32_t)rand();
+}
+#endif
+
+#ifndef UNIT_TEST
+#include <Arduino.h>
+#else
+#include <cstdio>
+#include <cstdarg>
+#include <string.h>
+class SerialClass
+{
+public:
+    void println(const char *s) { printf("%s\n", s); }
+    void printf(const char *fmt, ...)
+    {
+        va_list args;
+        va_start(args, fmt);
+        vprintf(fmt, args);
+        va_end(args);
+    }
+
+
+};
+extern SerialClass Serial;
+#endif
+
+#ifdef UNIT_TEST
+SerialClass Serial;
+#endif
+
+
 static const uint8_t PKT_BROADCAST = 0x01;
 static const uint8_t PKT_RREQ = 0x02;
 static const uint8_t PKT_RREP = 0x03;
@@ -16,6 +54,10 @@ AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
 
 bool AODVRouter::begin()
 {
+#ifdef UNIT_TEST
+    // For unit tests, skip task creation and assume initialization is successful.
+    return true;
+#else
     BaseType_t taskCreated = xTaskCreate(
         routerTask,
         "AODVRouterTask",
@@ -29,8 +71,11 @@ bool AODVRouter::begin()
         return false;
     }
     return true;
+#endif
 }
 
+#ifndef UNIT_TEST
+// The routerTask function is used only when running under FreeRTOS.
 void AODVRouter::routerTask(void *pvParameters)
 {
     AODVRouter *router = reinterpret_cast<AODVRouter *>(pvParameters);
@@ -45,6 +90,7 @@ void AODVRouter::routerTask(void *pvParameters)
         }
     }
 }
+#endif
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {
@@ -413,7 +459,7 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
 
 // TRANSMIT PACKET
 void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHeader, size_t extLen,
-                                const uint8_t *payload = nullptr, size_t payloadLen = 0)
+                                const uint8_t *payload, size_t payloadLen)
 {
     uint8_t buffer[255];
     size_t offset = 0;
