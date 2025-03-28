@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <queue.h>
-#include "RadioManager.h"
+#include "IRadioManager.h"
 
 /**
  * @brief A simple ping-pong router that processes incoming packets and replies.
@@ -19,7 +19,7 @@ public:
      * @brief Construct a new Ping Pong Router object.
      * @param radioManager A pointer to the RadioManager that owns the RX/TX queues.
      */
-    PingPongRouter(RadioManager *radioManager);
+    PingPongRouter(IRadioManager *radioManager);
 
     /**
      * @brief Initialize and create the router task.
@@ -28,7 +28,7 @@ public:
     bool begin();
 
 private:
-    RadioManager *_radioManager;
+    IRadioManager *_radioManager;
     TaskHandle_t _routerTaskHandle;
 
     // The router task function.

@@ -12,7 +12,7 @@ static const uint8_t PKT_DATA = 0x06;
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
-AODVRouter::AODVRouter(RadioManager *radioManager, uint32_t myNodeID)
+AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
     : _radioManager(radioManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr)
 {
 }

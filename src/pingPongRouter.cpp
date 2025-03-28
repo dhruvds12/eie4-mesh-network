@@ -3,7 +3,7 @@
 #include <task.h>
 #include <string.h>
 
-PingPongRouter::PingPongRouter(RadioManager *radioManager)
+PingPongRouter::PingPongRouter(IRadioManager *radioManager)
     : _radioManager(radioManager), _routerTaskHandle(nullptr)
 {
 }

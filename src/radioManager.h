@@ -1,16 +1,17 @@
 #ifndef RADIOMANAGER_H
 #define RADIOMANAGER_H
 
+#include "IRadioManager.h"
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <semphr.h>
 #include "ILoRaRadio.h"
 
-struct RadioPacket
-{
-    uint8_t data[256];
-    size_t len;
-};
+// struct RadioPacket
+// {
+//     uint8_t data[256];
+//     size_t len;
+// };
 
 /**
  * @brief RadioManager class
@@ -18,7 +19,7 @@ struct RadioPacket
  * Provides a FreeRTOS-based concurrency layer on top of ILoRaRadio.
  * Handles radio interrupts, sets up receiving, and can do basic transmissions.
  */
-class RadioManager
+class RadioManager : public IRadioManager
 {
 public:
     /**

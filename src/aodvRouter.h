@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <queue.h>
-#include "radioManager.h"
+#include "IRadioManager.h"
 #include "packet.h"
 #include <map>
 #include <vector>
@@ -31,7 +31,7 @@ public:
      * @param RadioManager
      * @param myNodeID
      */
-    AODVRouter(RadioManager *RadioManager, uint32_t myNodeID);
+    AODVRouter(IRadioManager *RadioManager, uint32_t myNodeID);
 
     /**
      * @brief Initialise and create the router task
@@ -52,7 +52,7 @@ public:
     void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
 
 private:
-    RadioManager *_radioManager;
+    IRadioManager *_radioManager;
     uint32_t _myNodeID;
     TaskHandle_t _routerTaskHandler;
 
