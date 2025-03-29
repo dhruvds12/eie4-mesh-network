@@ -1,7 +1,6 @@
 #ifndef AODVROUTER_H
 #define AODVROUTER_H
 
-
 #include "IRadioManager.h"
 #include "packet.h"
 #include <map>
@@ -165,7 +164,9 @@ private:
     // DATA QUEUE HELPER FUNCTIONS
     void flushDataQueue(uint32_t destNodeID);
 
+#ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
+#endif
 };
 
 #endif
