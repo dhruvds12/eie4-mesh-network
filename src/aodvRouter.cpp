@@ -522,7 +522,8 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
 
     // TODO: IMPORTANT need to actually remove route to finalDestination
     // The issue is because we do not know the route we took with this message
-    // we have to make some assumptions about the current routes that everyone has stored
+    // we have to make some assumptions about the current routes that everyone has stored 
+    // Need to assume that everyones routeTable is unchanged.
 
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)
 }
