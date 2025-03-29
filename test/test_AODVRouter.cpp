@@ -101,6 +101,68 @@ TEST(AODVRouterTest, BasicReceiveRREP)
     EXPECT_EQ(actualReDeliveringNode.hopcount, ExpectedReDeliveringNode.hopcount) << "Incorrect hop count";
 }
 
+// Ensure that the RREP is forwarded + routes added
+TEST(AODVRouterTest, ForwardRREP)
+{
+
+}
+
+// Ensure that on receiving a RREP that the Data queue is flushed correctly
+TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
+{
+
+}
+
+// Ensure that the correct field in the AODVRouter _routeTable is removed
+TEST(AODVRouterTest, BasicReceiveRERR)
+{
+
+}
+
+// Ensure that the correct response when I am the inteded target of a RREQ
+TEST(AODVRouterTest, BasicReceiveRREQ)
+{
+
+}
+
+// Ensure that the correct response when I am not the inteded target of a RREQ
+TEST(AODVRouterTest, ForwardRREQ)
+{
+
+}
+
+// Ensure that the correct response when I am not the inteded target of a RREQ but have a route to target
+TEST(AODVRouterTest, RespondToRREQ)
+{
+
+}
+
+// Ensure that when I am the receiving node everything works
+TEST(AODVRouterTest, handleData)
+{
+
+}
+
+// Ensure that the Data is forwarded
+TEST(AODVRouterTest, ForwardData)
+{
+
+}
+
+// Ensure that the routeTable is updated when a new route with fewer hops is found
+TEST(AODVRouterTest, NewRouteFound)
+{
+
+}
+
+// Ensure node only processes broadcasts and messages intended for me
+// Ensure that the RREP is forwarded
+TEST(AODVRouterTest, ReadCorrectMessages)
+{
+
+}
+
+
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
