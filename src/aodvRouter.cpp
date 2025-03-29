@@ -1,42 +1,5 @@
 #include "AODVRouter.h"
-
-#ifdef UNIT_TEST
-#include <stdlib.h>
-#define pvPortMalloc(size) malloc(size)
-#define vPortFree(ptr) free(ptr)
-
-uint32_t esp_random() {
-    return (uint32_t)rand();
-}
-#endif
-
-#ifndef UNIT_TEST
 #include <Arduino.h>
-#else
-#include <cstdio>
-#include <cstdarg>
-#include <string.h>
-class SerialClass
-{
-public:
-    void println(const char *s) { printf("%s\n", s); }
-    void printf(const char *fmt, ...)
-    {
-        va_list args;
-        va_start(args, fmt);
-        vprintf(fmt, args);
-        va_end(args);
-    }
-
-
-};
-extern SerialClass Serial;
-#endif
-
-#ifdef UNIT_TEST
-SerialClass Serial;
-#endif
-
 
 static const uint8_t PKT_BROADCAST = 0x01;
 static const uint8_t PKT_RREQ = 0x02;
@@ -52,6 +15,7 @@ AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
 {
 }
 
+//TODO: can the ifdef be removed?
 bool AODVRouter::begin()
 {
 #ifdef UNIT_TEST
@@ -74,6 +38,7 @@ bool AODVRouter::begin()
 #endif
 }
 
+// TODO: Can the ifndef be removed?
 #ifndef UNIT_TEST
 // The routerTask function is used only when running under FreeRTOS.
 void AODVRouter::routerTask(void *pvParameters)

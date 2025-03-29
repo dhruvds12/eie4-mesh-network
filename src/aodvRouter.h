@@ -6,12 +6,8 @@
 #include "packet.h"
 #include <map>
 #include <vector>
-
-#ifdef UNIT_TEST
-typedef void *TaskHandle_t;
-#else
 #include <FreeRTOS.h>
-#endif
+
 struct RouteEntry
 {
     uint32_t nextHop;
