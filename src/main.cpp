@@ -15,6 +15,16 @@
 // TODO: uncomment the following only on one
 // of the nodes to initiate the pings
 // #define INITIATING_NODE
+#define BLUETOOTH
+
+#ifdef BLUETOOTH
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEServer.h>
+#endif
+
+// Define a custom service UUID (you can use any valid UUID)
+#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 
 // --- Get Node Mac address ---
 uint32_t getNodeID()
@@ -45,7 +55,38 @@ void VextOFF(void)
   digitalWrite(Vext, HIGH);
 }
 
-// --- Main Setup Function ---
+// void setupQueues()
+// {
+//   radioRxQueue = xQueueCreate(10, sizeof(LoRaManager::RadioPacket));
+//   if (radioRxQueue == NULL)
+//   {
+//     Serial.println("Failed to create radioRxQueue");
+//   }
+
+// }
+
+// Create a global radio driver instance.
+SX1262Config myRadio(8, 14, 12, 13);
+// SX1262Config myRadio(10, 2,3, 9);
+
+// Create the radio manager instance.
+RadioManager radioManager(&myRadio);
+
+// Create the ping-pong router instance.
+PingPongRouter pingPongRouter(&radioManager);
+
+class MyServerCallbacks : public BLEServerCallbacks
+{
+  void onConnect(BLEServer *pServer) override
+  {
+    Serial.println("Device connected");
+  }
+  void onDisconnect(BLEServer *pServer) override
+  {
+    Serial.println("Device disconnected");
+  }
+};
+
 void setup()
 {
   Serial.begin(115200);
@@ -72,7 +113,26 @@ void setup()
     // add logic for mqtt client setup here.... 
  }
 
-  // Initialize the radio manager
+ #ifdef BLUETOOTH
+ BLEDevice::init("Heltec BLE Test Node");
+ 
+ BLEServer *pServer = BLEDevice::createServer();
+ pServer->setCallbacks(new MyServerCallbacks()); // Set our connection callbacks
+ 
+ BLEService *pService = pServer->createService(SERVICE_UUID);
+ pService->start();
+ 
+ BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+ pAdvertising->start();
+ 
+ Serial.println("BLE advertising started...");
+ 
+ #endif
+ 
+// Initialize the radio manager
+// initialize SX1262 LoRa module
+// lora.begin();
+#ifndef BLUETOOTH
   if (!radioManager.begin())
   {
     Serial.println("Radio Manager initialization failed!");
@@ -91,6 +151,7 @@ void setup()
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
   }
+#endif
 
 #if defined(INITIATING_NODE)
   // Send the first packet on this node
@@ -104,5 +165,8 @@ void setup()
 // --- Main Loop ---
 void loop()
 {
-
+// lora.update();
+#ifdef BLUETOOTH
+  delay(1000);
+#endif
 }
