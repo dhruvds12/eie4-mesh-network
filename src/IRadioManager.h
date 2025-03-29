@@ -6,7 +6,7 @@
 
 struct RadioPacket
 {
-    uint8_t data[256];
+    uint8_t data[255];
     size_t len;
 };
 

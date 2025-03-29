@@ -15,7 +15,7 @@ AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
 {
 }
 
-//TODO: can the ifdef be removed?
+// TODO: can the ifdef be removed?
 bool AODVRouter::begin()
 {
 #ifdef UNIT_TEST
@@ -113,7 +113,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         return;
     }
 
-    if (bh.destNodeID != BROADCAST_ADDR || bh.destNodeID != _myNodeID)
+    if (bh.destNodeID != BROADCAST_ADDR && bh.destNodeID != _myNodeID)
     {
         Serial.println("[AODVRouter] Not a message for me");
         return;
@@ -165,7 +165,11 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     if (rreq.RREQDestNodeID == _myNodeID)
     {
         Serial.printf("[AODVRouter] RREQ arrived at final dest: me (%u)\n", _myNodeID);
-        sendRREP(rreq.originNodeID, _myNodeID, base.srcNodeID, base.hopCount + 1);
+        // Note: 
+        // Changed hop count to not use the prev hop count as it may take a different route to get back to the 
+        // the origin node so we reset to 0. To improve this we would need to store the route taken by this packet.
+        // Therefore, numHops needds to incremented everytime it is forwarded.
+        sendRREP(rreq.originNodeID, _myNodeID, base.srcNodeID, 0);
         return;
     }
 
@@ -173,7 +177,8 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     {
         RouteEntry re = getRoute(base.destNodeID);
         Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", base.destNodeID, rreq.originNodeID);
-        sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, base.hopCount + 1);
+        // There is a route to the node, therefore use the entry as the base number of hops 
+        sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
         return;
     }
 
@@ -204,7 +209,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     memcpy(&rrep, payload, sizeof(RREPHeader));
 
     // update route to the rrep.RREPDESTNODEID if not already found
-    updateRoute(rrep.RREPDestNodeID, base.srcNodeID, base.hopCount + 1);
+    updateRoute(rrep.RREPDestNodeID, base.srcNodeID, rrep.numHops + 1);
 
     // technically should also add the neighbour who sent it as you may not have them saved either
     updateRoute(base.srcNodeID, base.srcNodeID, 1);
@@ -228,7 +233,8 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     }
 
     RouteEntry re = getRoute(base.destNodeID);
-    RREPHeader newRrep = rrep; // don't need to change
+    RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
+    newRrep.numHops++;
 
     BaseHeader fwdBase = base;
     fwdBase.destNodeID = re.nextHop;

@@ -8,6 +8,9 @@
 #include <vector>
 #include <FreeRTOS.h>
 
+#ifdef UNIT_TEST
+#include <gtest/gtest_prod.h>
+#endif
 struct RouteEntry
 {
     uint32_t nextHop;
@@ -161,6 +164,8 @@ private:
 
     // DATA QUEUE HELPER FUNCTIONS
     void flushDataQueue(uint32_t destNodeID);
+
+    FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
 };
 
 #endif
