@@ -18,9 +18,7 @@
 #define BLUETOOTH
 
 #ifdef BLUETOOTH
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEServer.h>
+#include <NimBLEDevice.h>
 #endif
 
 // Define a custom service UUID (you can use any valid UUID)
@@ -40,8 +38,27 @@ DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 AODVRouter aodvRouter(&radioManager, getNodeID());
+#ifdef BLUETOOTH
+// NimBLE server callbacks for connection events
+class MyServerCallbacks : public NimBLEServerCallbacks
+{
+  void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
+  {
+    Serial.println("Device connected");
+    Serial.printf("Latency : %x", connInfo.getConnLatency());
+    Serial.println();
+  }
+  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
+  {
+    Serial.println("Device disconnected");
+    Serial.printf("Reason: %x", reason);
+    Serial.println();
+    // Restart advertising to allow reconnection
+    NimBLEDevice::startAdvertising();
+  }
+};
+#endif
 
-// --- Vext Control Functions ---
 void VextON(void)
 {
   pinMode(Vext, OUTPUT);
@@ -54,38 +71,6 @@ void VextOFF(void)
   pinMode(Vext, OUTPUT);
   digitalWrite(Vext, HIGH);
 }
-
-// void setupQueues()
-// {
-//   radioRxQueue = xQueueCreate(10, sizeof(LoRaManager::RadioPacket));
-//   if (radioRxQueue == NULL)
-//   {
-//     Serial.println("Failed to create radioRxQueue");
-//   }
-
-// }
-
-// Create a global radio driver instance.
-SX1262Config myRadio(8, 14, 12, 13);
-// SX1262Config myRadio(10, 2,3, 9);
-
-// Create the radio manager instance.
-RadioManager radioManager(&myRadio);
-
-// Create the ping-pong router instance.
-PingPongRouter pingPongRouter(&radioManager);
-
-class MyServerCallbacks : public BLEServerCallbacks
-{
-  void onConnect(BLEServer *pServer) override
-  {
-    Serial.println("Device connected");
-  }
-  void onDisconnect(BLEServer *pServer) override
-  {
-    Serial.println("Device disconnected");
-  }
-};
 
 void setup()
 {
@@ -113,25 +98,30 @@ void setup()
     // add logic for mqtt client setup here.... 
  }
 
- #ifdef BLUETOOTH
- BLEDevice::init("Heltec BLE Test Node");
- 
- BLEServer *pServer = BLEDevice::createServer();
- pServer->setCallbacks(new MyServerCallbacks()); // Set our connection callbacks
- 
- BLEService *pService = pServer->createService(SERVICE_UUID);
- pService->start();
- 
- BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
- pAdvertising->start();
- 
- Serial.println("BLE advertising started...");
- 
- #endif
- 
-// Initialize the radio manager
-// initialize SX1262 LoRa module
-// lora.begin();
+#ifdef BLUETOOTH
+  // Initialize NimBLE with a device name and explicitly set the device name
+  NimBLEDevice::init("HeltecNode");
+  NimBLEDevice::setDeviceName("HeltecNode");
+
+  // Create a BLE server and set connection callbacks
+  NimBLEServer *pServer = NimBLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  // Create and start the BLE service
+  NimBLEService *pService = pServer->createService(SERVICE_UUID);
+  pService->start();
+
+  // Get the advertising object, enable scan response data, and start advertising
+  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  NimBLEAdvertisementData scanResponse;
+  scanResponse.setName("HeltecNode");
+  pAdvertising->setScanResponseData(scanResponse);
+
+  pAdvertising->start();
+
+  Serial.println("NimBLE advertising started...");
+#endif
+
 #ifndef BLUETOOTH
   if (!radioManager.begin())
   {
@@ -154,7 +144,6 @@ void setup()
 #endif
 
 #if defined(INITIATING_NODE)
-  // Send the first packet on this node
   const char initMsg[] = "PING";
   radioManager.enqueueTxPacket((const uint8_t *)initMsg, sizeof(initMsg) - 1);
 #else
@@ -165,7 +154,6 @@ void setup()
 // --- Main Loop ---
 void loop()
 {
-// lora.update();
 #ifdef BLUETOOTH
   delay(1000);
 #endif
