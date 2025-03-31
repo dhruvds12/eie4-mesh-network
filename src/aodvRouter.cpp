@@ -234,7 +234,14 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 
     RouteEntry re = getRoute(base.destNodeID);
     RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
-    newRrep.numHops++;
+    newRrep.numHops++;         // increment number of hops
+    /*
+    The above is an initial version
+    - We do not currently save the path taken by each packet 
+    - Therefore, we can not guarentee the rrep will follow rreq route therefore, we assume 
+      that since the packet found a route to the note it will find a route back to originator of rreq
+    - This is a simple method but should suffice for this application.
+    */
 
     BaseHeader fwdBase = base;
     fwdBase.destNodeID = re.nextHop;
