@@ -52,7 +52,16 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "any": "cpp",
-        "list": "cpp"
+        "chrono": "cpp",
+        "condition_variable": "cpp",
+        "csignal": "cpp",
+        "list": "cpp",
+        "ratio": "cpp",
+        "set": "cpp",
+        "iostream": "cpp",
+        "mutex": "cpp",
+        "thread": "cpp",
+        "variant": "cpp"
     },
     "C_Cpp.inlayHints.autoDeclarationTypes.enabled": true,
     "C_Cpp.inlayHints.parameterNames.enabled": true,

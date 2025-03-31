@@ -12,14 +12,13 @@
 #include "wifiConfig.h"
 #include "wifiManager.h"
 
-// TODO: uncomment the following only on one
-// of the nodes to initiate the pings
+// Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
 #define BLUETOOTH
 
 #ifdef BLUETOOTH
-#include <NimBLEDevice.h>
-static NimBLEServer *pServer;
+#include "BluetoothManager.h"
+BluetoothManager btManager;
 #endif
 
 // Define a custom service UUID (you can use any valid UUID)
@@ -39,27 +38,6 @@ DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 AODVRouter aodvRouter(&radioManager, getNodeID());
-#ifdef BLUETOOTH
-// NimBLE server callbacks for connection events
-class MyServerCallbacks : public NimBLEServerCallbacks
-{
-  void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
-  {
-    Serial.println("Device connected");
-    Serial.printf("Latency : %x", connInfo.getConnLatency());
-    Serial.println();
-    NimBLEDevice::startAdvertising();
-  }
-  void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
-  {
-    Serial.println("Device disconnected");
-    Serial.printf("Reason: %x", reason);
-    Serial.println();
-    // Restart advertising to allow reconnection
-    NimBLEDevice::startAdvertising();
-  }
-};
-#endif
 
 void VextON(void)
 {
@@ -101,27 +79,9 @@ void setup()
  }
 
 #ifdef BLUETOOTH
-  // Initialize NimBLE with a device name and explicitly set the device name
-  NimBLEDevice::init("HeltecNode");
-  NimBLEDevice::setDeviceName("HeltecNode");
-
-  // Create a BLE server and set connection callbacks
-  pServer = NimBLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  // Create and start the BLE service
-  NimBLEService *pService = pServer->createService(SERVICE_UUID);
-  pService->start();
-
-  // Get the advertising object, enable scan response data, and start advertising
-  NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-  // pAdvertising->setAdvertisingInterval(4);
-  NimBLEAdvertisementData scanResponse;
-  scanResponse.setName("HeltecNode");
-  pAdvertising->setScanResponseData(scanResponse);
-
-  pAdvertising->start(0);
-
+  // Initialize BLE using our abstraction.
+  btManager.init("HeltecNode");
+  btManager.startAdvertising();
   Serial.println("NimBLE advertising started...");
 #endif
 
@@ -159,6 +119,8 @@ void loop()
 {
 #ifdef BLUETOOTH
   delay(1000);
-  Serial.print(pServer->getConnectedCount());
+  // Example: print the number of connected clients.
+  Serial.print("Connected count: ");
+  Serial.println(btManager.getServer()->getConnectedCount());
 #endif
 }
