@@ -19,6 +19,7 @@
 
 #ifdef BLUETOOTH
 #include <NimBLEDevice.h>
+static NimBLEServer *pServer;
 #endif
 
 // Define a custom service UUID (you can use any valid UUID)
@@ -47,6 +48,7 @@ class MyServerCallbacks : public NimBLEServerCallbacks
     Serial.println("Device connected");
     Serial.printf("Latency : %x", connInfo.getConnLatency());
     Serial.println();
+    NimBLEDevice::startAdvertising();
   }
   void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
   {
@@ -104,7 +106,7 @@ void setup()
   NimBLEDevice::setDeviceName("HeltecNode");
 
   // Create a BLE server and set connection callbacks
-  NimBLEServer *pServer = NimBLEDevice::createServer();
+  pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
   // Create and start the BLE service
@@ -113,11 +115,12 @@ void setup()
 
   // Get the advertising object, enable scan response data, and start advertising
   NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+  // pAdvertising->setAdvertisingInterval(4);
   NimBLEAdvertisementData scanResponse;
   scanResponse.setName("HeltecNode");
   pAdvertising->setScanResponseData(scanResponse);
 
-  pAdvertising->start();
+  pAdvertising->start(0);
 
   Serial.println("NimBLE advertising started...");
 #endif
@@ -156,5 +159,6 @@ void loop()
 {
 #ifdef BLUETOOTH
   delay(1000);
+  Serial.print(pServer->getConnectedCount());
 #endif
 }
