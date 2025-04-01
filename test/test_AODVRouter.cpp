@@ -20,10 +20,17 @@ TEST(AODVRouterTest, BasicSendDataTest)
     uint8_t testData[] = {0xDE, 0xAD, 0xBE, 0xEF};
     AODVRouter.sendData(200, testData, sizeof(testData));
 
-    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected a packet to be transmitted!";
+    // check that there is an addition to the dataBuffer
+    ASSERT_FALSE(AODVRouter._dataBuffer.empty()) << "Expected a new val in dataBuffer";
+    std::vector<dataBufferEntry> entry = AODVRouter._dataBuffer[200];
+
+    ASSERT_FALSE(entry.empty()) << "Expected at least one entry for dest 200";
+    EXPECT_EQ(entry.size(), 1) << "Expected entry for destNodeId: 200 to be 1";
+    EXPECT_EQ(memcmp(entry[0].data, testData, sizeof(testData)), 0) << "Buffer content not equal to expected test data";
 
     // Need to check that the packet type is a RREQ
 
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected a packet to be transmitted!";
     // Check the element that has been stored on the txPacketSent vector
     const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
 
@@ -183,7 +190,7 @@ TEST(AODVRouterTest, ForwardRREP)
     EXPECT_EQ(baseHdrTxPacket.destNodeID, 400) << "Base header destNodeID should be 400";
     EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
     EXPECT_EQ(baseHdrTxPacket.hopCount, 1) << "Source node should match router's ID";
-    
+
     // test the rrepHdr
     EXPECT_EQ(rrepHdrTxPacket.originNodeID, 300) << "RREP origin node should be 300";
     EXPECT_EQ(rrepHdrTxPacket.RREPDestNodeID, 5656) << "RREP destination node should be 5656";
@@ -195,7 +202,71 @@ TEST(AODVRouterTest, ForwardRREP)
 // Ensure that on receiving a RREP that the Data queue is flushed correctly
 TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    uint8_t testData[] = {0xDE, 0xAD, 0xBE, 0xEF};
+    AODVRouter.sendData(200, testData, sizeof(testData));
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+
+    // remove the packet that should have been added as we know this behaviour is correct
+    mockRadio.txPacketsSent.erase(mockRadio.txPacketsSent.begin());
+    ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Expected empty txPacketSent";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = myID;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RREP;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 0;
+    baseHdr.reserved = 0;
+
+    RREPHeader rrep;
+    rrep.originNodeID = myID;  // node that originally needed the route
+    rrep.RREPDestNodeID = 200; // destination of the route
+    rrep.lifetime = 0;
+    rrep.numHops = 7;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset += serialiseBaseHeader(baseHdr, buffer);
+    offset += serialiseRREPHeader(rrep, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    DATAHeader dataTxPacket;
+    offset_txPacket += deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket += deserialiseDATAHeader(packetBuffer.data(), dataTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_DATA) << "Packet type should be Data";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, 499) << "Base header destNodeID should be 499";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 0) << "Incorrect number of hops";
+
+    EXPECT_EQ(dataTxPacket.finalDestID, 200) << "Incorrect final destination";
+
+    const size_t headersSize = sizeof(BaseHeader) + sizeof(DATAHeader);
+    ASSERT_GE(packetBuffer.size(), headersSize) << "Packet buffer is too short";
+    const uint8_t *actualData = packetBuffer.data() + headersSize;
+    size_t actualDataLen = packetBuffer.size() - headersSize;
+
+    // Compare the actual payload with testData.
+    EXPECT_EQ(actualDataLen, sizeof(testData)) << "Actual data length does not match expected length";
+    EXPECT_EQ(memcmp(actualData, testData, sizeof(testData)), 0) << "Transmitted data does not match expected testData";
 }
 
 // Ensure that the correct field in the AODVRouter _routeTable is removed

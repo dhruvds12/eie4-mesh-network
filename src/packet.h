@@ -155,7 +155,7 @@ inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, siz
     return offset;
 }
 
-inline size_t deserialiseRERRHeader(const uint8_t *buffer, size_t offset, RERRHeader &header)
+inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, size_t offset)
 {
     memcpy(&header.reporterNodeID, buffer + offset, 4);
     offset += 4;
@@ -177,7 +177,7 @@ inline size_t serialiseACKHeader(const ACKHeader &ack, uint8_t *buffer, size_t o
     return offset;
 }
 
-inline size_t deserialiseACKHeader(const uint8_t *buffer, size_t offset, ACKHeader &ack)
+inline size_t deserialiseACKHeader(const uint8_t *buffer, ACKHeader &ack, size_t offset)
 {
     memcpy(&ack.originalPacketID, buffer + offset, 4);
     offset += 4;
@@ -191,7 +191,7 @@ inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_
     return offset;
 }
 
-inline size_t deserialiseDATAHeader(const uint8_t *buffer, size_t offset, DATAHeader &data)
+inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, size_t offset)
 {
     memcpy(&data.finalDestID, buffer + offset, 4);
     offset += 4;

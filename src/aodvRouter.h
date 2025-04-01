@@ -165,8 +165,10 @@ private:
     void flushDataQueue(uint32_t destNodeID);
 
 #ifdef UNIT_TEST
+    FRIEND_TEST(AODVRouterTest, BasicSendDataTest);
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
     FRIEND_TEST(AODVRouterTest, ForwardRREP);
+    FRIEND_TEST(AODVRouterTest, ReceiveRREPFlushDataQueue);
 #endif
 };
 
