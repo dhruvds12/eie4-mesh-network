@@ -105,7 +105,7 @@ inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, siz
     return offset;
 }
 
-inline size_t deserialiseRREQHeader(uint8_t *buffer, RREQHeader &header, size_t offset)
+inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, size_t offset)
 {
     memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
@@ -128,13 +128,14 @@ inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, siz
     return offset;
 }
 
-inline size_t deserialiseRREPHeader(uint8_t *buffer, RREPHeader &header, size_t offset)
+inline size_t deserialiseRREPHeader(const uint8_t *buffer, RREPHeader &header, size_t offset)
 {
     memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.RREPDestNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.lifetime, buffer + offset, 2);
+    offset += 2;
     header.numHops = buffer[offset++];
     return offset;
 }

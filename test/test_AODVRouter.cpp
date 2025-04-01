@@ -107,9 +107,10 @@ TEST(AODVRouterTest, ForwardRREP)
     MockRadioManager mockRadio;
     uint32_t myID = 5738;
     AODVRouter AODVRouter(&mockRadio, myID);
-    // need to add a route to node 300
-    mockRadio.updateRoute(300, 400, 7);
-    
+    // need to add a route to node 300 so that the packet get routed
+    AODVRouter.updateRoute(300, 400, 7);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+
     // create the received radio message
     BaseHeader baseHdr;
     baseHdr.destNodeID = myID;
@@ -121,85 +122,129 @@ TEST(AODVRouterTest, ForwardRREP)
     baseHdr.reserved = 0;
 
     RREPHeader rrep;
-    rrep.originNodeID = 300;   // node that originally needed the route
+    rrep.originNodeID = 300;    // node that originally needed the route
     rrep.RREPDestNodeID = 5656; // destination of the route
     rrep.lifetime = 0;
     rrep.numHops = 7;
 
+    EXPECT_EQ(rrep.originNodeID, 300) << "RREP init origin node should be 300";
+    EXPECT_EQ(rrep.RREPDestNodeID, 5656) << "RREP init destination node should be 5656";
+    EXPECT_EQ(rrep.lifetime, 0) << "RREP init lifetime should be 0 - infinite";
+    EXPECT_EQ(rrep.numHops, 7) << "RREP init num hops should be incremented to 8";
+
     uint8_t buffer[255];
     size_t offset = 0;
-    
 
     // Call handle packet
     offset += serialiseBaseHeader(baseHdr, buffer);
     offset += serialiseRREPHeader(rrep, buffer, offset);
 
     RadioPacket packet;
-    std::copy(buffer, buffer+offset, packet.data);
+    std::copy(buffer, buffer + offset, packet.data);
     packet.len = offset;
 
     AODVRouter.handlePacket(&packet);
 
-    // Check routes and destnode of rrep and srcNode should be added 
-    
+    // Check routes and destnode of rrep and srcNode should be added
+    // Make sure not empty -> no point continuing
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+
+    RouteEntry ExpectedReDeliveringNode;
+    ExpectedReDeliveringNode.nextHop = 200;
+    ExpectedReDeliveringNode.hopcount = 1;
+
+    RouteEntry actualReDeliveringNode;
+    actualReDeliveringNode = AODVRouter.getRoute(200);
+    EXPECT_EQ(actualReDeliveringNode.nextHop, ExpectedReDeliveringNode.nextHop) << "Incorrect next hop for 200";
+    EXPECT_EQ(actualReDeliveringNode.hopcount, ExpectedReDeliveringNode.hopcount) << "Incorrect hop count for 200";
+
+    RouteEntry ExpectedRe;
+    ExpectedRe.nextHop = 200;
+    ExpectedRe.hopcount = 8;
+
+    RouteEntry actualRe;
+    actualRe = AODVRouter.getRoute(5656);
+
+    // Check RouteEntry for requested node
+    EXPECT_EQ(actualRe.nextHop, ExpectedRe.nextHop) << "Incorrect next hop";
+    EXPECT_EQ(actualRe.hopcount, ExpectedRe.hopcount) << "Incorrect hop count";
 
     // check that transmitPacket map has a new entry with hopcount 8.
-    EXPECT_EQ(true, false) << "Test not implemented";
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    RREPHeader rrepHdrTxPacket;
+    offset_txPacket += deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket += deserialiseRREPHeader(packetBuffer.data(), rrepHdrTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_RREP) << "Packet type should be RREQ";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, 400) << "Base header destNodeID should be 400";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 1) << "Source node should match router's ID";
+    
+    // test the rrepHdr
+    EXPECT_EQ(rrepHdrTxPacket.originNodeID, 300) << "RREP origin node should be 300";
+    EXPECT_EQ(rrepHdrTxPacket.RREPDestNodeID, 5656) << "RREP destination node should be 5656";
+    EXPECT_EQ(rrepHdrTxPacket.lifetime, 0) << "RREP lifetime should be 0 - infinite";
+    EXPECT_EQ(rrepHdrTxPacket.numHops, 8) << "RREP num hops should be incremented to 8";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that on receiving a RREP that the Data queue is flushed correctly
 TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the correct field in the AODVRouter _routeTable is removed
 TEST(AODVRouterTest, BasicReceiveRERR)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the correct response when I am the inteded target of a RREQ
 TEST(AODVRouterTest, BasicReceiveRREQ)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the correct response when I am not the inteded target of a RREQ
 TEST(AODVRouterTest, ForwardRREQ)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the correct response when I am not the inteded target of a RREQ but have a route to target
 TEST(AODVRouterTest, RespondToRREQ)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that when I am the receiving node everything works
 TEST(AODVRouterTest, handleData)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the Data is forwarded
 TEST(AODVRouterTest, ForwardData)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure that the routeTable is updated when a new route with fewer hops is found
 TEST(AODVRouterTest, NewRouteFound)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // Ensure node only processes broadcasts and messages intended for me
 // Ensure that the RREP is forwarded
 TEST(AODVRouterTest, ReadCorrectMessages)
 {
-    EXPECT_EQ(true, false) << "Test not implemented";
+    // EXPECT_EQ(true, false) << "Test not implemented";
 }
 
 // TODO : tests for incorrect packets

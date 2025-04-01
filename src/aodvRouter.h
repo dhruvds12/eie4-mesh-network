@@ -166,6 +166,7 @@ private:
 
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
+    FRIEND_TEST(AODVRouterTest, ForwardRREP);
 #endif
 };
 

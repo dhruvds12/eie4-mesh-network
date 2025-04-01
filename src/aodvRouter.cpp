@@ -226,13 +226,13 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
-    if (!hasRoute(base.destNodeID))
+    if (!hasRoute(rrep.originNodeID))
     {
         Serial.println("[AODVRouter] Got RREP but no route to the origin!");
         return;
     }
 
-    RouteEntry re = getRoute(base.destNodeID);
+    RouteEntry re = getRoute(rrep.originNodeID);
     RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
     newRrep.numHops++;         // increment number of hops
     /*
