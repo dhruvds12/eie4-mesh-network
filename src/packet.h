@@ -21,7 +21,7 @@ struct BaseHeader
     uint8_t reserved;    // 1 byte: reserved
 };
 
-// Extended header for RREQ (6 bytes)
+// Extended header for RREQ (8 bytes)
 struct RREQHeader
 {
     uint32_t originNodeID;   // 4 bytes: origin of the RREQ
@@ -30,7 +30,8 @@ struct RREQHeader
     // uint8_t rreqReserved;    // 1 byte:  reserved
 };
 
-// Extended header for RREP (7 bytes)
+// Extended header for RREP (11 bytes) -> has to be packed
+#pragma pack(push, 1)
 struct RREPHeader
 {
     uint32_t originNodeID;   // 4 bytes: original rreq requester
@@ -38,6 +39,7 @@ struct RREPHeader
     uint16_t lifetime;       // 2 bytes: route lifetime
     uint8_t numHops;         // 1 byte:  Number of hops using this route
 };
+#pragma pack(pop)
 
 // Extended header for RERR (20 bytes)
 struct RERRHeader
@@ -45,7 +47,7 @@ struct RERRHeader
     uint32_t reporterNodeID;     // 4 bytes: Node that reported the issue
     uint32_t brokenNodeID;       // 4 bytes: Broken nodeID
     uint32_t originalDestNodeID; // 4 bytes: Original intended destination
-    uint32_t originalPacketId;   // 4 bytes: Original packetID that will have been overwritten
+    uint32_t originalPacketID;   // 4 bytes: Original packetID that will have been overwritten
     uint32_t senderNodeID;       // 4 bytes: The original sender
 };
 
@@ -148,7 +150,7 @@ inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.originalDestNodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.originalPacketId, 4);
+    memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.senderNodeID, 4);
     offset += 4;
@@ -163,7 +165,7 @@ inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, s
     offset += 4;
     memcpy(&header.originalDestNodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.originalPacketId, buffer + offset, 4);
+    memcpy(&header.originalPacketID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.senderNodeID, buffer + offset, 4);
     offset += 4;
