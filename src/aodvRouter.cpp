@@ -137,6 +137,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         handleRERR(bh, payload, payloadLen);
         break;
     case PKT_DATA:
+        Serial.println("[AODVRouter] Entered Data path");
         handleData(bh, payload, payloadLen);
         break;
     default:
@@ -165,8 +166,8 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     if (rreq.RREQDestNodeID == _myNodeID)
     {
         Serial.printf("[AODVRouter] RREQ arrived at final dest: me (%u)\n", _myNodeID);
-        // Note: 
-        // Changed hop count to not use the prev hop count as it may take a different route to get back to the 
+        // Note:
+        // Changed hop count to not use the prev hop count as it may take a different route to get back to the
         // the origin node so we reset to 0. To improve this we would need to store the route taken by this packet.
         // Therefore, numHops needds to incremented everytime it is forwarded.
         sendRREP(rreq.originNodeID, _myNodeID, base.srcNodeID, 0);
@@ -175,9 +176,9 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
 
     if (hasRoute(rreq.RREQDestNodeID))
     {
-        RouteEntry re = getRoute(base.destNodeID);
-        Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", base.destNodeID, rreq.originNodeID);
-        // There is a route to the node, therefore use the entry as the base number of hops 
+        RouteEntry re = getRoute(rreq.RREQDestNodeID);
+        Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
+        // There is a route to the node, therefore use the entry as the base number of hops
         sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
         return;
     }
@@ -201,6 +202,8 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 {
     if (payloadLen < sizeof(RREPHeader))
     {
+        Serial.printf("[AODVRouter] RREP payload size %u \n", (unsigned)payloadLen);
+        Serial.printf("[AODVRouter] RREP expected payload size %u \n", sizeof(RREPHeader));
         Serial.println("[AODVRouter] RREP payload too small!");
         return;
     }
@@ -237,8 +240,8 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     newRrep.numHops++;         // increment number of hops
     /*
     The above is an initial version
-    - We do not currently save the path taken by each packet 
-    - Therefore, we can not guarentee the rrep will follow rreq route therefore, we assume 
+    - We do not currently save the path taken by each packet
+    - Therefore, we can not guarentee the rrep will follow rreq route therefore, we assume
       that since the packet found a route to the note it will find a route back to originator of rreq
     - This is a simple method but should suffice for this application.
     */
@@ -254,6 +257,8 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 
 void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size_t payloadLen)
 {
+    Serial.printf("[AODVRouter] RERR payload size %u \n", (unsigned)payloadLen);
+    Serial.printf("[AODVRouter] RERR expected payload size %u \n", sizeof(RERRHeader));
     if (payloadLen < sizeof(RERRHeader))
     {
         Serial.println("[AODVRouter] RERR payload too small");
@@ -276,7 +281,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
     if (_myNodeID == rerr.senderNodeID)
     {
         // I am the original creator of the message
-        Serial.printf("[AODVRouter] Message %u failed to send received RERR.", rerr.originalPacketId);
+        Serial.printf("[AODVRouter] Message %u failed to send received RERR.", rerr.originalPacketID);
         return;
     }
 
@@ -317,9 +322,10 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
 
     if (_myNodeID == dataHeader.finalDestID)
     {
+        Serial.println("[AODVRouter] Entered I am receiver path");
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
-        Serial.printf("Data: %.*s\n", actualData, actualDataLen);
+        Serial.printf("Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         return;
     }
 
@@ -400,7 +406,7 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
     rerr.reporterNodeID = _myNodeID; // I am reporting the error in the routing path
     rerr.brokenNodeID = brokenNodeID;
     rerr.originalDestNodeID = originalDest;
-    rerr.originalPacketId = originalPacketID;
+    rerr.originalPacketID = originalPacketID;
     rerr.senderNodeID = senderNodeID;
 
     transmitPacket(bh, (uint8_t *)&rerr, sizeof(RERRHeader));
@@ -529,7 +535,7 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
 
     // TODO: IMPORTANT need to actually remove route to finalDestination
     // The issue is because we do not know the route we took with this message
-    // we have to make some assumptions about the current routes that everyone has stored 
+    // we have to make some assumptions about the current routes that everyone has stored
     // Need to assume that everyones routeTable is unchanged.
 
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)

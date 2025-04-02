@@ -71,8 +71,8 @@ TEST(AODVRouterTest, BasicReceiveRREP)
     uint8_t buffer[255];
     size_t offset = 0;
 
-    offset += serialiseBaseHeader(baseHdr, buffer + offset);
-    offset += serialiseRREPHeader(rrep, buffer, offset);
+    offset = serialiseBaseHeader(baseHdr, buffer + offset);
+    offset = serialiseRREPHeader(rrep, buffer, offset);
 
     RadioPacket packet;
     std::copy(buffer, buffer + offset, packet.data);
@@ -143,8 +143,8 @@ TEST(AODVRouterTest, ForwardRREP)
     size_t offset = 0;
 
     // Call handle packet
-    offset += serialiseBaseHeader(baseHdr, buffer);
-    offset += serialiseRREPHeader(rrep, buffer, offset);
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREPHeader(rrep, buffer, offset);
 
     RadioPacket packet;
     std::copy(buffer, buffer + offset, packet.data);
@@ -183,8 +183,8 @@ TEST(AODVRouterTest, ForwardRREP)
     size_t offset_txPacket = 0;
     BaseHeader baseHdrTxPacket;
     RREPHeader rrepHdrTxPacket;
-    offset_txPacket += deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
-    offset_txPacket += deserialiseRREPHeader(packetBuffer.data(), rrepHdrTxPacket, offset_txPacket);
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseRREPHeader(packetBuffer.data(), rrepHdrTxPacket, offset_txPacket);
 
     EXPECT_EQ(baseHdrTxPacket.packetType, PKT_RREP) << "Packet type should be RREQ";
     EXPECT_EQ(baseHdrTxPacket.destNodeID, 400) << "Base header destNodeID should be 400";
@@ -234,8 +234,8 @@ TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
     size_t offset = 0;
 
     // Call handle packet
-    offset += serialiseBaseHeader(baseHdr, buffer);
-    offset += serialiseRREPHeader(rrep, buffer, offset);
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREPHeader(rrep, buffer, offset);
 
     RadioPacket packet;
     std::copy(buffer, buffer + offset, packet.data);
@@ -249,8 +249,8 @@ TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
     size_t offset_txPacket = 0;
     BaseHeader baseHdrTxPacket;
     DATAHeader dataTxPacket;
-    offset_txPacket += deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
-    offset_txPacket += deserialiseDATAHeader(packetBuffer.data(), dataTxPacket, offset_txPacket);
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseDATAHeader(packetBuffer.data(), dataTxPacket, offset_txPacket);
 
     EXPECT_EQ(baseHdrTxPacket.packetType, PKT_DATA) << "Packet type should be Data";
     EXPECT_EQ(baseHdrTxPacket.destNodeID, 499) << "Base header destNodeID should be 499";
@@ -272,43 +272,377 @@ TEST(AODVRouterTest, ReceiveRREPFlushDataQueue)
 // Ensure that the correct field in the AODVRouter _routeTable is removed
 TEST(AODVRouterTest, BasicReceiveRERR)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 5738;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    // need to add a route to node 300 so that the packet get routed
+    AODVRouter.updateRoute(300, 400, 7);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(300), true) << "Route to 300 should have be added";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = myID;
+    baseHdr.srcNodeID = 200;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RERR;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 5;
+    baseHdr.reserved = 0;
+
+    RERRHeader rerr;
+    rerr.reporterNodeID = 400;
+    rerr.brokenNodeID = 300;
+    rerr.originalDestNodeID = 300;
+    rerr.originalPacketID = 555555;
+    rerr.senderNodeID = myID;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRERRHeader(rerr, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+    ASSERT_TRUE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(300), false) << "Route to 300 should have been removed";
+}
+
+// A node on route to destination is broken -> route should still be removed
+TEST(AODVRouterTest, ComplicatedReceiveRERR)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 5738;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    // need to add a route to node 300 so that the packet get routed
+    AODVRouter.updateRoute(300, 400, 7);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(300), true) << "Route to 300 should have be added";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = myID;
+    baseHdr.srcNodeID = 200;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RERR;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 5;
+    baseHdr.reserved = 0;
+
+    RERRHeader rerr;
+    rerr.reporterNodeID = 100;
+    rerr.brokenNodeID = 400;
+    rerr.originalDestNodeID = 300;
+    rerr.originalPacketID = 555555;
+    rerr.senderNodeID = myID;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRERRHeader(rerr, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+    ASSERT_TRUE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(300), false) << "Route to 300 should have been removed";
+}
+
+TEST(AODVRouterTest, ForwardRERR)
+{
 }
 
 // Ensure that the correct response when I am the inteded target of a RREQ
 TEST(AODVRouterTest, BasicReceiveRREQ)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 5738;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 200;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RREQ;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 5;
+    baseHdr.reserved = 0;
+
+    RREQHeader rreq;
+    rreq.originNodeID = 50;
+    rreq.RREQDestNodeID = 5738;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREQHeader(rreq, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    RREPHeader rrepTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseRREPHeader(packetBuffer.data(), rrepTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_RREP) << "Packet type should be RREP";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, 200) << "Base header destNodeID should be 200";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 0) << "Incorrect number of hops";
+
+    EXPECT_EQ(rrepTxPacket.originNodeID, 50) << "Incorrect origin node";
+    EXPECT_EQ(rrepTxPacket.RREPDestNodeID, myID) << "Incorrect rrepDestNodeID";
+    EXPECT_EQ(rrepTxPacket.numHops, 0) << "Incorrect initial numHops";
+    EXPECT_EQ(rrepTxPacket.lifetime, 0) << "Not using default lifetime";
 }
 
 // Ensure that the correct response when I am not the inteded target of a RREQ
 TEST(AODVRouterTest, ForwardRREQ)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 778;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 200;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RREQ;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 5;
+    baseHdr.reserved = 0;
+
+    RREQHeader rreq;
+    rreq.originNodeID = 50;
+    rreq.RREQDestNodeID = 5738;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREQHeader(rreq, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    RREQHeader rreqTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseRREQHeader(packetBuffer.data(), rreqTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_RREQ) << "Packet type should be RREQ";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, BROADCAST_ADDR) << "Base header destNodeID should be 200";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 6) << "Incorrect number of hops";
+
+    EXPECT_EQ(rreqTxPacket.originNodeID, 50) << "Incorrect origin node";
+    EXPECT_EQ(rreqTxPacket.RREQDestNodeID, 5738) << "Incorrect rrepDestNodeID";
 }
 
 // Ensure that the correct response when I am not the inteded target of a RREQ but have a route to target
 TEST(AODVRouterTest, RespondToRREQ)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 60;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.updateRoute(5738, 400, 2);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(5738), true) << "Route to 5738 should have be added";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 200;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RREQ;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 5;
+    baseHdr.reserved = 0;
+
+    RREQHeader rreq;
+    rreq.originNodeID = 50;
+    rreq.RREQDestNodeID = 5738;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREQHeader(rreq, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    RREPHeader rrepTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseRREPHeader(packetBuffer.data(), rrepTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_RREP) << "Packet type should be RREP";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, 200) << "Base header destNodeID should be 200";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 0) << "Incorrect number of hops";
+
+    EXPECT_EQ(rrepTxPacket.originNodeID, 50) << "Incorrect origin node";
+    EXPECT_EQ(rrepTxPacket.RREPDestNodeID, 5738) << "Incorrect rrepDestNodeID";
+    EXPECT_EQ(rrepTxPacket.numHops, 2) << "Incorrect initial numHops";
+    EXPECT_EQ(rrepTxPacket.lifetime, 0) << "Not using default lifetime";
 }
 
 // Ensure that when I am the receiving node everything works
 TEST(AODVRouterTest, handleData)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_DATA;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 3;
+    baseHdr.reserved = 0;
+
+    DATAHeader dataHdr;
+    dataHdr.finalDestID = myID;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseDATAHeader(dataHdr, buffer, offset);
+
+    const char *payloadData = "Test Payload";
+    size_t payloadDataLen = strlen(payloadData);
+    // Check that the payload will fit in the buffer.
+    ASSERT_LE(offset + payloadDataLen, sizeof(buffer)) << "Payload does not fit in buffer";
+    memcpy(buffer + offset, payloadData, payloadDataLen);
+    offset += payloadDataLen;
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
 }
 
 // Ensure that the Data is forwarded
-TEST(AODVRouterTest, ForwardData)
+TEST(AODVRouterTest, forwardData)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.updateRoute(5738, 400, 2);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(5738), true) << "Route to 5738 should have be added";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_DATA;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 3;
+    baseHdr.reserved = 0;
+
+    DATAHeader dataHdr;
+    dataHdr.finalDestID = 5738;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseDATAHeader(dataHdr, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    DATAHeader dataTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+    offset_txPacket = deserialiseDATAHeader(packetBuffer.data(), dataTxPacket, offset_txPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_DATA) << "Packet type should be RREP";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, 400) << "Base header destNodeID should be 200";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, 499) << "Source node should match router's ID";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 4) << "Incorrect number of hops";
+
+    EXPECT_EQ(dataTxPacket.finalDestID, 5738) << "Incorrect final destination";
 }
 
 // Ensure that the routeTable is updated when a new route with fewer hops is found
 TEST(AODVRouterTest, NewRouteFound)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 60;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.updateRoute(5738, 400, 4);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(5738), true) << "Route to 5738 should have be added";
+
+    AODVRouter.updateRoute(5738, 200, 2);
+    EXPECT_EQ(AODVRouter.hasRoute(5738), true) << "Route to 5738 should have be added";
+    RouteEntry re = AODVRouter.getRoute(5738);
+
+    EXPECT_EQ(re.hopcount, 2) << "Route hopcount should be 2";
+    EXPECT_EQ(re.nextHop, 200) << "Route next hop should be 200";
+}
+
+TEST(AODVRouterTest, IgnoreNewRoute)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 60;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.updateRoute(5738, 400, 4);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(5738), true) << "Route to 5738 should have be added";
+
+    AODVRouter.updateRoute(5738, 200, 8);
+    RouteEntry re = AODVRouter.getRoute(5738);
+
+    EXPECT_EQ(re.hopcount, 4) << "Route to 300 should have be added";
+    EXPECT_EQ(re.nextHop, 400) << "Route to 300 should have be added";
 }
 
 // Ensure node only processes broadcasts and messages intended for me
@@ -329,7 +663,7 @@ TEST(AODVRouterTest, IgnoreMessagesNotAddressedToNode)
     baseHdr.reserved = 0;
 
     RREPHeader rrep;
-    rrep.originNodeID = 56;  // node that originally needed the route
+    rrep.originNodeID = 56;    // node that originally needed the route
     rrep.RREPDestNodeID = 200; // destination of the route
     rrep.lifetime = 0;
     rrep.numHops = 7;
@@ -338,8 +672,8 @@ TEST(AODVRouterTest, IgnoreMessagesNotAddressedToNode)
     size_t offset = 0;
 
     // Call handle packet
-    offset += serialiseBaseHeader(baseHdr, buffer);
-    offset += serialiseRREPHeader(rrep, buffer, offset);
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseRREPHeader(rrep, buffer, offset);
 
     RadioPacket packet;
     std::copy(buffer, buffer + offset, packet.data);
@@ -348,7 +682,6 @@ TEST(AODVRouterTest, IgnoreMessagesNotAddressedToNode)
     AODVRouter.handlePacket(&packet);
     ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Incorrectly handled the packet - should have ignored";
 }
-
 
 TEST(AODVRouterTest, ReadBroadcasts)
 {
@@ -369,8 +702,7 @@ TEST(AODVRouterTest, ReadBroadcasts)
     size_t offset = 0;
 
     // Call handle packet
-    offset += serialiseBaseHeader(baseHdr, buffer);
-    // offset += serialiseRREPHeader(rrep, buffer, offset);
+    offset = serialiseBaseHeader(baseHdr, buffer);
 
     RadioPacket packet;
     std::copy(buffer, buffer + offset, packet.data);
@@ -378,8 +710,7 @@ TEST(AODVRouterTest, ReadBroadcasts)
 
     AODVRouter.handlePacket(&packet);
     ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
-    // This test behaves as expected but to see internal workings we need to set assert_true to assert_false
-    // reading the logs proves correct working but 
+    // This test behaves as expected but to see internal workings we need to set -vvv
 }
 
 // TODO : tests for incorrect packets
