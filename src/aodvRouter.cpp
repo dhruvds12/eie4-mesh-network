@@ -201,7 +201,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 {
     if (payloadLen < sizeof(RREPHeader))
     {
-        Serial.println("[AODVRouter] RREQ payload too small!");
+        Serial.println("[AODVRouter] RREP payload too small!");
         return;
     }
 
@@ -305,7 +305,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
 {
     if (payloadLen < sizeof(DATAHeader))
     {
-        Serial.println("[AODVRouter] RERR payload too small");
+        Serial.println("[AODVRouter] DATA payload too small");
         return;
     }
 

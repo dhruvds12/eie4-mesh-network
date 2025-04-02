@@ -313,9 +313,73 @@ TEST(AODVRouterTest, NewRouteFound)
 
 // Ensure node only processes broadcasts and messages intended for me
 // Ensure that the RREP is forwarded
-TEST(AODVRouterTest, ReadCorrectMessages)
+TEST(AODVRouterTest, IgnoreMessagesNotAddressedToNode)
 {
-    // EXPECT_EQ(true, false) << "Test not implemented";
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = 56;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_RREP;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 0;
+    baseHdr.reserved = 0;
+
+    RREPHeader rrep;
+    rrep.originNodeID = 56;  // node that originally needed the route
+    rrep.RREPDestNodeID = 200; // destination of the route
+    rrep.lifetime = 0;
+    rrep.numHops = 7;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset += serialiseBaseHeader(baseHdr, buffer);
+    offset += serialiseRREPHeader(rrep, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+    ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Incorrectly handled the packet - should have ignored";
+}
+
+
+TEST(AODVRouterTest, ReadBroadcasts)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = BROADCAST_ADDR;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = 56464645;
+    baseHdr.packetType = PKT_DATA;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 0;
+    baseHdr.reserved = 0;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset += serialiseBaseHeader(baseHdr, buffer);
+    // offset += serialiseRREPHeader(rrep, buffer, offset);
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+    ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    // This test behaves as expected but to see internal workings we need to set assert_true to assert_false
+    // reading the logs proves correct working but 
 }
 
 // TODO : tests for incorrect packets

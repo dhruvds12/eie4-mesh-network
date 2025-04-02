@@ -169,6 +169,8 @@ private:
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
     FRIEND_TEST(AODVRouterTest, ForwardRREP);
     FRIEND_TEST(AODVRouterTest, ReceiveRREPFlushDataQueue);
+    FRIEND_TEST(AODVRouterTest, IgnoreMessagesNotAddressedToNode);
+    FRIEND_TEST(AODVRouterTest, ReadBroadcasts);
 #endif
 };
 
