@@ -21,7 +21,7 @@ bool AODVRouter::begin()
 {
 #ifdef UNIT_TEST
     // For unit tests, skip task creation and assume initialisation is successful.
-
+    // Serial.println("[AODVRouter] Run Begin");
     // Send broadcast message
     sendBroadcastInfo();
     return true;
@@ -41,13 +41,13 @@ bool AODVRouter::begin()
 
     sendBroadcastInfo();
 
-    /* 
-    
+    /*
+
     Create a software timer to send the broadcast every hour.
 
-    FreeRTOS is written in C, therefore the callback is declared static as it cannot be a 
-    member function. As it is not a member function it does not have a this pointer. Therefore, 
-    to ensure the pvTimerID is set to the pointer to this 
+    FreeRTOS is written in C, therefore the callback is declared static as it cannot be a
+    member function. As it is not a member function it does not have a this pointer. Therefore,
+    to ensure the pvTimerID is set to the pointer to this
     */
     _broadcastTimer = xTimerCreate(
         "BroadcastTimer",
@@ -109,11 +109,13 @@ void AODVRouter::sendBroadcastInfo()
     transmitPacket(bh, nullptr, 0, (const uint8_t *)info, infoLen);
 }
 
+#ifndef UNIT_TEST
 void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
 {
     AODVRouter *router = (AODVRouter *)pvTimerGetTimerID(xTimer);
     router->sendBroadcastInfo();
 }
+#endif
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {

@@ -203,6 +203,8 @@ private:
     FRIEND_TEST(AODVRouterTest, handleData);
     FRIEND_TEST(AODVRouterTest, forwardData);
     FRIEND_TEST(AODVRouterTest, DiscardSeenPacket);
+    FRIEND_TEST(AODVRouterTest, SendBroadcastInfo);
+    FRIEND_TEST(AODVRouterTest, ReceiveBroadcastInfo);
 #endif
 };
 

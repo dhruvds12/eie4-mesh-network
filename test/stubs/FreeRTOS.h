@@ -8,6 +8,7 @@
 #define vPortFree(ptr) free(ptr)
 
 // Provide a minimal definition for TaskHandle_t.
-typedef void* TaskHandle_t;
+typedef void *TaskHandle_t;
+typedef void *TimerHandle_t;
 
-#endif 
+#endif

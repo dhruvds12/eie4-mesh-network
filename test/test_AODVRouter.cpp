@@ -2,6 +2,7 @@
 #include "AODVRouter.h"
 #include "mocks/MockRadioManager.h"
 
+static const uint8_t PKT_BROADCAST_INFO = 0x00;
 static const uint8_t PKT_BROADCAST = 0x01;
 static const uint8_t PKT_RREQ = 0x02;
 static const uint8_t PKT_RREP = 0x03;
@@ -778,6 +779,37 @@ TEST(AODVRouterTest, DiscardSeenPacket)
     AODVRouter.handlePacket(&packet);
 
     ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Expected txPacketsSent to be empty";
+}
+
+TEST(AODVRouterTest, SendBroadcastInfo)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.begin();
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_BROADCAST_INFO) << "Packet type should be DATA";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, BROADCAST_ADDR) << "Base header destNodeID should be 400";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID ) << "Source node should match original sender";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 0) << "Incorrect number of hops";
+}
+
+TEST(AODVRouterTest, ReceiveBroadcastInfo)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    //TODO: make sure the packet is also forwarded
+
 }
 
 int main(int argc, char **argv)
