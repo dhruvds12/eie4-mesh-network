@@ -107,6 +107,14 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     BaseHeader bh;
     deserialiseBaseHeader(rxPacket->data, bh);
 
+    if (seenID(bh.packetID))
+    {
+        Serial.println("[AODVRouter] Received packet which has already been processed");
+        return;
+    }
+
+    saveID(bh.packetID);
+
     if (bh.srcNodeID == _myNodeID)
     {
         Serial.println("[AODVRouter] Reveived packet with srcNodeID == myNodeID. Not expected behaviour!");
@@ -539,4 +547,18 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
     // Need to assume that everyones routeTable is unchanged.
 
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)
+}
+
+bool AODVRouter::seenID(uint32_t packetID)
+{
+    if (seenIDs.find(packetID) != seenIDs.end())
+    {
+        return true;
+    }
+    return false;
+}
+
+void AODVRouter::saveID(uint32_t packetID)
+{
+    seenIDs.insert(packetID);
 }

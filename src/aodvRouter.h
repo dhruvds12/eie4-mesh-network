@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include <FreeRTOS.h>
+#include <unordered_set>
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
@@ -62,6 +63,8 @@ private:
 
     // Map for entries awaiting RREP
     std::map<uint32_t, std::vector<dataBufferEntry>> _dataBuffer;
+
+    std::unordered_set<uint32_t> seenIDs;
 
     /**
      * @brief Router task function
@@ -164,6 +167,11 @@ private:
     // DATA QUEUE HELPER FUNCTIONS
     void flushDataQueue(uint32_t destNodeID);
 
+    // Seen IDs SET HELPER FUNCTIONS
+    bool seenID(uint32_t packetID);
+
+    void saveID(uint32_t packetID);
+
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
@@ -180,6 +188,7 @@ private:
     FRIEND_TEST(AODVRouterTest, IgnoreNewRoute);
     FRIEND_TEST(AODVRouterTest, handleData);
     FRIEND_TEST(AODVRouterTest, forwardData);
+    FRIEND_TEST(AODVRouterTest, DiscardSeenPacket);
 #endif
 };
 
