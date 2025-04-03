@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "AODVRouter.h"
 #include "mocks/MockRadioManager.h"
+#include <Arduino.h>
 
 static const uint8_t PKT_BROADCAST_INFO = 0x00;
 static const uint8_t PKT_BROADCAST = 0x01;
@@ -606,7 +607,7 @@ TEST(AODVRouterTest, forwardData)
 
     EXPECT_EQ(baseHdrTxPacket.packetType, PKT_DATA) << "Packet type should be DATA";
     EXPECT_EQ(baseHdrTxPacket.destNodeID, 400) << "Base header destNodeID should be 400";
-    EXPECT_EQ(baseHdrTxPacket.srcNodeID, baseHdr.srcNodeID ) << "Source node should match original sender";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, baseHdr.srcNodeID) << "Source node should match original sender";
     EXPECT_EQ(baseHdrTxPacket.hopCount, 4) << "Incorrect number of hops";
 
     EXPECT_EQ(dataTxPacket.finalDestID, 5738) << "Incorrect final destination";
@@ -767,9 +768,9 @@ TEST(AODVRouterTest, DiscardSeenPacket)
 
     EXPECT_EQ(dataTxPacket.finalDestID, 5738) << "Incorrect final destination";
 
-    // test seenIDs
-    EXPECT_EQ(AODVRouter.seenID(baseHdr.packetID), true) << "ID not added to the set";
-    EXPECT_EQ(AODVRouter.seenID((uint32_t)454445354354), false) << "Not seen ID showing true";
+    // test receivedPacketIDs
+    EXPECT_EQ(AODVRouter.isDuplicatePacketID(baseHdr.packetID), true) << "ID not added to the set";
+    EXPECT_EQ(AODVRouter.isDuplicatePacketID((uint32_t)454445354354), false) << "Not seen ID showing true";
 
     // clear txPacketsSent
     mockRadio.txPacketsSent.erase(mockRadio.txPacketsSent.begin());
@@ -795,10 +796,9 @@ TEST(AODVRouterTest, SendBroadcastInfo)
     BaseHeader baseHdrTxPacket;
     offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
 
-
     EXPECT_EQ(baseHdrTxPacket.packetType, PKT_BROADCAST_INFO) << "Packet type should be DATA";
     EXPECT_EQ(baseHdrTxPacket.destNodeID, BROADCAST_ADDR) << "Base header destNodeID should be 400";
-    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID ) << "Source node should match original sender";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, myID) << "Source node should match original sender";
     EXPECT_EQ(baseHdrTxPacket.hopCount, 0) << "Incorrect number of hops";
 }
 
@@ -808,8 +808,90 @@ TEST(AODVRouterTest, ReceiveBroadcastInfo)
     uint32_t myID = 100;
     AODVRouter AODVRouter(&mockRadio, myID);
 
-    //TODO: make sure the packet is also forwarded
+    // TODO: make sure the packet is also forwarded
+    BaseHeader bh;
+    bh.destNodeID = BROADCAST_ADDR; // Broadcast to all nodes
+    bh.srcNodeID = 4545848;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_BROADCAST_INFO; // Use your broadcast packet type
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
 
+    const char *info = "Node active; connected users: user1, user2";
+    size_t infoLen = strlen(info);
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(bh, buffer);
+
+    ASSERT_LE(offset + infoLen, sizeof(buffer)) << "Payload does not fit in buffer";
+    memcpy(buffer + offset, info, infoLen);
+    offset += infoLen;
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    // check that node has been added to the discovered nodes set
+    EXPECT_EQ(AODVRouter.isNodeIDKnown(bh.srcNodeID), true) << "Node ID not added to set";
+
+    ASSERT_FALSE(mockRadio.txPacketsSent.empty()) << "Expected packet to be transmitted";
+    const std::vector<uint8_t> &packetBuffer = mockRadio.txPacketsSent[0].data;
+
+    size_t offset_txPacket = 0;
+    BaseHeader baseHdrTxPacket;
+    offset_txPacket = deserialiseBaseHeader(packetBuffer.data(), baseHdrTxPacket);
+
+    EXPECT_EQ(baseHdrTxPacket.packetType, PKT_BROADCAST_INFO) << "Packet type should be DATA";
+    EXPECT_EQ(baseHdrTxPacket.destNodeID, BROADCAST_ADDR) << "Base header destNodeID should be 400";
+    EXPECT_EQ(baseHdrTxPacket.srcNodeID, 4545848) << "Source node should match original sender";
+    EXPECT_EQ(baseHdrTxPacket.hopCount, 1) << "Incorrect number of hops";
+}
+
+TEST(AODVRouterTest, ReceiveBroadcastInfoExceedMaxHops)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+
+    // TODO: make sure the packet is also forwarded
+    BaseHeader bh;
+    bh.destNodeID = BROADCAST_ADDR; // Broadcast to all nodes
+    bh.srcNodeID = 4545848;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_BROADCAST_INFO; // Use your broadcast packet type
+    bh.flags = 0;
+    bh.hopCount = 4;
+    bh.reserved = 0;
+
+    const char *info = "Node active; connected users: user1, user2";
+    size_t infoLen = strlen(info);
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(bh, buffer);
+
+    ASSERT_LE(offset + infoLen, sizeof(buffer)) << "Payload does not fit in buffer";
+    memcpy(buffer + offset, info, infoLen);
+    offset += infoLen;
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    // check that node has been added to the discovered nodes set
+    EXPECT_EQ(AODVRouter.isNodeIDKnown(bh.srcNodeID), true) << "Node ID not added to set";
+
+    ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Nothing to be transmitted";
 }
 
 int main(int argc, char **argv)

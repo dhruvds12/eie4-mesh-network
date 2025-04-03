@@ -66,10 +66,13 @@ private:
     std::map<uint32_t, std::vector<dataBufferEntry>> _dataBuffer;
 
     // Set to store seen message ids
-    std::unordered_set<uint32_t> seenIDs;
+    std::unordered_set<uint32_t> receivedPacketIDs;
 
     // Handle periodic broadcasts timer
     TimerHandle_t _broadcastTimer;
+
+    // nodes on the network
+    std::unordered_set<uint32_t> discoveredNodes;
 
     /**
      * @brief Router task function
@@ -80,8 +83,8 @@ private:
 
     /**
      * @brief Timer callback to send broadcast info
-     * 
-     * @param xTimer 
+     *
+     * @param xTimer
      */
     static void broadcastTimerCallback(TimerHandle_t xTimer);
 
@@ -131,6 +134,24 @@ private:
      * @param payloadLen
      */
     void handleData(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    /**
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
+     */
+    void handleBroadcast(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    /**
+     * @brief
+     *
+     * @param base
+     * @param payload
+     * @param payloadLen
+     */
+    void handleBroadcastInfo(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
     // SEND PACKET HELPER FUNCTIONS
 
@@ -182,9 +203,14 @@ private:
     void flushDataQueue(uint32_t destNodeID);
 
     // Seen IDs SET HELPER FUNCTIONS
-    bool seenID(uint32_t packetID);
+    bool isDuplicatePacketID(uint32_t packetID);
 
-    void saveID(uint32_t packetID);
+    void storePacketID(uint32_t packetID);
+
+    // known nodes
+    bool isNodeIDKnown(uint32_t packetID);
+
+    void saveNodeID(uint32_t packetID);
 
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);
@@ -205,6 +231,7 @@ private:
     FRIEND_TEST(AODVRouterTest, DiscardSeenPacket);
     FRIEND_TEST(AODVRouterTest, SendBroadcastInfo);
     FRIEND_TEST(AODVRouterTest, ReceiveBroadcastInfo);
+    FRIEND_TEST(AODVRouterTest, ReceiveBroadcastInfoExceedMaxHops);
 #endif
 };
 

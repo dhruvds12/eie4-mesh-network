@@ -11,6 +11,8 @@ static const uint8_t PKT_DATA = 0x06;
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
+static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
+
 AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
     : _radioManager(radioManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr)
 {
@@ -167,13 +169,13 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     BaseHeader bh;
     deserialiseBaseHeader(rxPacket->data, bh);
 
-    if (seenID(bh.packetID))
+    if (isDuplicatePacketID(bh.packetID))
     {
         Serial.println("[AODVRouter] Received packet which has already been processed");
         return;
     }
 
-    saveID(bh.packetID);
+    storePacketID(bh.packetID);
 
     if (bh.srcNodeID == _myNodeID)
     {
@@ -205,8 +207,13 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         handleRERR(bh, payload, payloadLen);
         break;
     case PKT_DATA:
-        Serial.println("[AODVRouter] Entered Data path");
         handleData(bh, payload, payloadLen);
+        break;
+    case PKT_BROADCAST:
+        Serial.println("Received broadcast");
+        break;
+    case PKT_BROADCAST_INFO:
+        handleBroadcastInfo(bh, payload, payloadLen);
         break;
     default:
         Serial.printf("[AODVRouter] Unknown packet type :( %u\n", bh.packetType);
@@ -418,6 +425,31 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
     transmitPacket(fwd, (uint8_t *)&dataHeader, sizeof(DATAHeader), actualData, actualDataLen);
 }
 
+void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payload, size_t payloadLen)
+{
+    if (!isNodeIDKnown(base.srcNodeID))
+    {
+        saveNodeID(base.srcNodeID);
+    }
+
+    Serial.printf("[AODVRouter] Received BroadcastInfo. PayloadLen=%u\n", (unsigned)payloadLen);
+    Serial.printf("Info: %.*s\n", (int)payloadLen, (const char *)payload);
+
+    // increment number of hops
+    BaseHeader fwd = base;
+    fwd.hopCount++;
+
+    // check number of hops
+    if (fwd.hopCount >= MAX_HOPS)
+    {
+        Serial.println("[AODVRouter] Exceeded max hops broadcast info stopped");
+        return;
+    }
+
+    // forward the message, keep src id as the same
+    transmitPacket(fwd, (const uint8_t *)nullptr, 0, payload, payloadLen);
+}
+
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR
 // TODO: Need to complete
 
@@ -609,16 +641,30 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)
 }
 
-bool AODVRouter::seenID(uint32_t packetID)
+bool AODVRouter::isDuplicatePacketID(uint32_t packetID)
 {
-    if (seenIDs.find(packetID) != seenIDs.end())
+    if (receivedPacketIDs.find(packetID) != receivedPacketIDs.end())
     {
         return true;
     }
     return false;
 }
 
-void AODVRouter::saveID(uint32_t packetID)
+void AODVRouter::storePacketID(uint32_t packetID)
 {
-    seenIDs.insert(packetID);
+    receivedPacketIDs.insert(packetID);
+}
+
+bool AODVRouter::isNodeIDKnown(uint32_t packetID)
+{
+    if (discoveredNodes.find(packetID) != receivedPacketIDs.end())
+    {
+        return true;
+    }
+    return false;
+}
+
+void AODVRouter::saveNodeID(uint32_t packetID)
+{
+    discoveredNodes.insert(packetID);
 }

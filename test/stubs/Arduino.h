@@ -6,14 +6,17 @@
 #include <cstdlib>
 #include <stdint.h>
 
-extern "C" uint32_t esp_random() {
+extern "C" inline uint32_t esp_random()
+{
     return (uint32_t)rand();
 }
 
-class SerialClass {
+class SerialClass
+{
 public:
     void println(const char *s) { printf("%s\n", s); }
-    void printf(const char *fmt, ...) {
+    void printf(const char *fmt, ...)
+    {
         va_list args;
         va_start(args, fmt);
         vprintf(fmt, args);
@@ -23,6 +26,6 @@ public:
 
 extern SerialClass Serial;
 
-SerialClass Serial;
+inline SerialClass Serial;
 
-#endif // ARDUINO_H
+#endif
