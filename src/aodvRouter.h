@@ -51,6 +51,7 @@ public:
      * @param data The raw data
      * @param len The length of the raw data
      */
+
     void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
 
 private:
@@ -64,7 +65,11 @@ private:
     // Map for entries awaiting RREP
     std::map<uint32_t, std::vector<dataBufferEntry>> _dataBuffer;
 
+    // Set to store seen message ids
     std::unordered_set<uint32_t> seenIDs;
+
+    // Handle periodic broadcasts timer
+    TimerHandle_t _broadcastTimer;
 
     /**
      * @brief Router task function
@@ -72,6 +77,15 @@ private:
      * @param pvParameters
      */
     static void routerTask(void *pvParameters);
+
+    /**
+     * @brief Timer callback to send broadcast info
+     * 
+     * @param xTimer 
+     */
+    static void broadcastTimerCallback(TimerHandle_t xTimer);
+
+    void sendBroadcastInfo();
 
     // TOP LEVEL RX PACKET HANDLERS
 

@@ -1,6 +1,7 @@
 #include "AODVRouter.h"
 #include <Arduino.h>
 
+static const uint8_t PKT_BROADCAST_INFO = 0x00;
 static const uint8_t PKT_BROADCAST = 0x01;
 static const uint8_t PKT_RREQ = 0x02;
 static const uint8_t PKT_RREP = 0x03;
@@ -19,7 +20,10 @@ AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
 bool AODVRouter::begin()
 {
 #ifdef UNIT_TEST
-    // For unit tests, skip task creation and assume initialization is successful.
+    // For unit tests, skip task creation and assume initialisation is successful.
+
+    // Send broadcast message
+    sendBroadcastInfo();
     return true;
 #else
     BaseType_t taskCreated = xTaskCreate(
@@ -34,6 +38,36 @@ bool AODVRouter::begin()
         Serial.println("[AODVRouter] Could not create router task!");
         return false;
     }
+
+    sendBroadcastInfo();
+
+    /* 
+    
+    Create a software timer to send the broadcast every hour.
+
+    FreeRTOS is written in C, therefore the callback is declared static as it cannot be a 
+    member function. As it is not a member function it does not have a this pointer. Therefore, 
+    to ensure the pvTimerID is set to the pointer to this 
+    */
+    _broadcastTimer = xTimerCreate(
+        "BroadcastTimer",
+        pdMS_TO_TICKS(3600000),  // 3600000ms = 1 hour
+        pdTRUE,                  // Auto-reload for periodic execution
+        (void *)this,            // Pass the current router instance as timer ID
+        broadcastTimerCallback); // Callback to send broadcast info
+
+    if (_broadcastTimer == nullptr)
+    {
+        Serial.println("[AODVRouter] Failed to create broadcast timer");
+    }
+    else
+    {
+        if (xTimerStart(_broadcastTimer, 0) != pdPASS)
+        {
+            Serial.println("[AODVRouter] Failed to start broadcast timer");
+        }
+    }
+
     return true;
 #endif
 }
@@ -56,6 +90,30 @@ void AODVRouter::routerTask(void *pvParameters)
     }
 }
 #endif
+
+void AODVRouter::sendBroadcastInfo()
+{
+    BaseHeader bh;
+    bh.destNodeID = BROADCAST_ADDR; // Broadcast to all nodes
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_BROADCAST_INFO; // Use your broadcast packet type
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    const char *info = "Node active; connected users: user1, user2";
+    size_t infoLen = strlen(info);
+
+    // Use the transmitPacket method to send the broadcast
+    transmitPacket(bh, nullptr, 0, (const uint8_t *)info, infoLen);
+}
+
+void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
+{
+    AODVRouter *router = (AODVRouter *)pvTimerGetTimerID(xTimer);
+    router->sendBroadcastInfo();
+}
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {
