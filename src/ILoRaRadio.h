@@ -23,6 +23,7 @@ public:
     virtual void startReceive() = 0;
 
     virtual int readData(String &receivedData, int len) = 0;
+    virtual int readData(uint8_t *buffer, size_t len) = 0;
 
     virtual void setDio1Callback(void (*callback)()) = 0;
 
@@ -31,6 +32,8 @@ public:
     virtual float getSNR() = 0;
 
     virtual bool isChannelFree() = 0;
+
+    virtual size_t getPacketLength() = 0;
 };
 
 #endif

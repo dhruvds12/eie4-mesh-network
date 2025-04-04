@@ -136,7 +136,7 @@ void AODVRouter::cleanupAckBuffer()
     TickType_t now = xTaskGetTickCount();
     // Create a temporary list of packetIDs to remove.
     std::vector<uint32_t> expiredPackets;
-    
+
     for (const auto &entry : ackBuffer)
     {
         // If the packet has been in the buffer longer than ACK_TIMEOUT_TICKS
@@ -145,23 +145,23 @@ void AODVRouter::cleanupAckBuffer()
             expiredPackets.push_back(entry.first);
         }
     }
-    
+
     // Process all expired entries.
     for (uint32_t packetID : expiredPackets)
     {
         // Retrieve the stored ack entry.
         ackBufferEntry abe = ackBuffer[packetID];
-        
+
         // Deserialize the BaseHeader from the stored packet.
         BaseHeader baseHdr;
         size_t offset = deserialiseBaseHeader(abe.packet, baseHdr);
-        
+
         // Handle DATA packets (you can add similar logic for other packet types)
         if (baseHdr.packetType == PKT_DATA)
         {
             DATAHeader dataHdr;
             offset = deserialiseDATAHeader(abe.packet, dataHdr, offset);
-            
+
             // Trigger a Route Error message for the unacknowledged packet.
             // Here, we assume the broken node is the expected next hop.
             sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, dataHdr.finalDestID, baseHdr.packetID);
@@ -173,12 +173,11 @@ void AODVRouter::cleanupAckBuffer()
             memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
             sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
         }
-        
+
         // Remove the expired entry from ackBuffer.
         ackBuffer.erase(packetID);
     }
 }
-
 
 #ifndef UNIT_TEST
 void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
@@ -238,6 +237,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
 {
     if (rxPacket->len < sizeof(BaseHeader))
     {
+        Serial.printf("length of packet %u\n", rxPacket->len);
         Serial.println("[AODVRouter] Received packet with size less than baseheader size. Discarded");
         return;
     }
@@ -271,7 +271,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
 
     if (bh.srcNodeID == _myNodeID)
     {
-        Serial.println("[AODVRouter] Reveived packet with srcNodeID == myNodeID. Not expected behaviour!");
+        Serial.println("[AODVRouter] Reveived packet with srcNodeID == myNodeID. Not expected behaviour! Unless I sent a broadcast");
         return;
     }
 
@@ -665,6 +665,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
         memcpy(buffer + offset, payload, payloadLen);
         offset += payloadLen;
     }
+    Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
 
     // Now send the complete packet to the radio manager.
     bool queued = _radioManager->enqueueTxPacket(buffer, offset);

@@ -47,10 +47,14 @@ public:
    * @return int
    */
   int readData(String &receivedData, int len = 0) override;
+  int readData(uint8_t *buffer, size_t len) override;
+
   void setDio1Callback(void (*callback)()) override;
   float getRSSI() override;
   float getSNR() override;
   bool isChannelFree() override;
+
+  size_t getPacketLength() override;
 
 private:
   SX1262 radio; // Reference to the SX1262 radio instance.

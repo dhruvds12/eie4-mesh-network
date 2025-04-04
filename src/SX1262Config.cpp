@@ -47,6 +47,11 @@ int SX1262Config::readData(String &receivedData, int len)
     return radio.readData(receivedData, len);
 }
 
+int SX1262Config::readData(uint8_t *buffer, size_t len)
+{
+    return radio.readData(buffer, len);
+}
+
 void SX1262Config::setDio1Callback(void (*callback)())
 {
     radio.setDio1Action(callback);
@@ -88,4 +93,9 @@ bool SX1262Config::isChannelFree()
     }
 
     return false;
+}
+
+size_t SX1262Config::getPacketLength()
+{
+    return radio.getPacketLength();
 }

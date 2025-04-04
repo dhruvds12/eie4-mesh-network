@@ -186,15 +186,18 @@ void RadioManager::handleReceiveInterrupt()
         _radio->startReceive();
         return;
     }
-    // Temporarily using a string to store the
-    String received;
-    int result = _radio->readData(received, 0);
+
+    size_t packetLength = _radio->getPacketLength();
+    uint8_t buffer[255];
+
+    int result = _radio->readData(buffer, packetLength);
     if (result == 0) // radiolib not imported equivalent to RADIOLIB_ERR_NONE
     {
-        size_t len = received.length();
+        size_t len = packetLength;
         if (len == 0)
         {
             Serial.print("Ignore empty");
+            vPortFree(packet);
             // Likely a false interrupt; just restart receive mode.
             _radio->startReceive();
             return;
@@ -204,7 +207,7 @@ void RadioManager::handleReceiveInterrupt()
             len = sizeof(packet->data);
         }
 
-        memcpy(packet->data, received.c_str(), len);
+        memcpy(packet->data, buffer, len);
         packet->len = len;
 
         if (xQueueSend(_rxQueue, &packet, 0) != pdPASS)
@@ -217,6 +220,7 @@ void RadioManager::handleReceiveInterrupt()
     {
         Serial.print("[RadioManager] readData error: ");
         Serial.println(result);
+        vPortFree(packet);
     }
 
     // Always restart receive
@@ -253,9 +257,7 @@ void RadioManager::txTask(void *pvParameteres)
                 {
                     manager->_radio->setDio1Callback(manager->dio1Isr);
 
-                    Serial.print("[RadioManager] Transmitted Packet: ");
-                    Serial.write(packet->data, packet->len);
-                    Serial.println();
+                    Serial.printf("[RadioManager] Transmitted Packet: Length %u\n", packet->len);
                 }
                 else
                 {

@@ -6,11 +6,13 @@
 #include "SX1262Config.h"
 #include "RadioManager.h"
 #include "PingPongRouter.h"
+#include "aodvRouter.h"
+#include <esp_system.h>
 // #include <string>
 
 // TODO: uncomment the following only on one
 // of the nodes to initiate the pings
-#define INITIATING_NODE
+// #define INITIATING_NODE
 
 // Initialize DisplayManager with appropriate I2C pins and address
 DisplayManager displayManager;
@@ -57,7 +59,19 @@ SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 
 // Create the ping-pong router instance.
-PingPongRouter pingPongRouter(&radioManager);
+// PingPongRouter pingPongRouter(&radioManager);
+
+// Helper function to derive a unique node ID from the board's MAC address
+uint32_t getNodeID()
+{
+  // Retrieve the 64-bit MAC address from efuse
+  uint64_t mac = ESP.getEfuseMac();
+  // Use the lower 32 bits as the unique node ID
+  return (uint32_t)(mac & 0xFFFFFFFF);
+}
+
+// Instantiate the AODVRouter with the radio manager and node ID
+AODVRouter aodvRouter(&radioManager, getNodeID());
 
 void setup()
 {
@@ -85,7 +99,7 @@ void setup()
   }
 
   // Start the ping-pong router task.
-  if (!pingPongRouter.begin())
+  if (!aodvRouter.begin())
   {
     Serial.println("PingPong Router initialization failed!");
     while (1)
