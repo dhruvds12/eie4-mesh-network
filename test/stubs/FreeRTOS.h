@@ -11,4 +11,12 @@
 typedef void *TaskHandle_t;
 typedef void *TimerHandle_t;
 
+typedef uint32_t TickType_t;
+
+inline TickType_t xTaskGetTickCount(void)
+{
+    static TickType_t tick = 0;
+    return tick++;
+}
+
 #endif

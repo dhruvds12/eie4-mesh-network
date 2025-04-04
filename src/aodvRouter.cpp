@@ -169,6 +169,22 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     BaseHeader bh;
     deserialiseBaseHeader(rxPacket->data, bh);
 
+    auto it = ackBuffer.find(bh.packetID);
+    if (it != ackBuffer.end())
+    {
+        // TODO:  verify that the packet came from the expected next hop:
+        // if (bh.srcNodeID == it->second.expectedNextHop)
+        // {
+        //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
+        //     ackBuffer.erase(it);
+        //     return;
+        // }
+
+        Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
+        ackBuffer.erase(it);
+        return;
+    }
+
     if (isDuplicatePacketID(bh.packetID))
     {
         Serial.println("[AODVRouter] Received packet which has already been processed");
@@ -313,6 +329,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     RouteEntry re = getRoute(rrep.originNodeID);
     RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
     newRrep.numHops++;         // increment number of hops
+    // TODO: is this required already have a hopCount?????
     /*
     The above is an initial version
     - We do not currently save the path taken by each packet
@@ -356,14 +373,14 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
     if (_myNodeID == rerr.senderNodeID)
     {
         // I am the original creator of the message
-        Serial.printf("[AODVRouter] Message %u failed to send received RERR.", rerr.originalPacketID);
+        Serial.printf("[AODVRouter] Message %u failed to send received RERR.\n", rerr.originalPacketID);
         return;
     }
 
     // is there a route to the original sender
     if (!hasRoute(rerr.senderNodeID))
     {
-        Serial.println("[AODVRouter] Failed to deliver RERR to original sender");
+        Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
     }
 
@@ -400,7 +417,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         Serial.println("[AODVRouter] Entered I am receiver path");
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
-        Serial.printf("Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         return;
     }
 
@@ -433,7 +450,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     }
 
     Serial.printf("[AODVRouter] Received BroadcastInfo. PayloadLen=%u\n", (unsigned)payloadLen);
-    Serial.printf("Info: %.*s\n", (int)payloadLen, (const char *)payload);
+    Serial.printf("[AODVRouter] Info: %.*s\n", (int)payloadLen, (const char *)payload);
 
     // increment number of hops
     BaseHeader fwd = base;
@@ -579,6 +596,18 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
     {
         Serial.println("[AODVRouter] transmitPacket could not enqueue!");
     }
+    else
+    {
+        // For unicast packets that require an implicit ACK, store a copy in the ackBuffer.
+        if (header.destNodeID != BROADCAST_ADDR &&
+            (header.packetType == PKT_DATA || header.packetType == PKT_RREP))
+        {
+            // Get the expected next hop from the routing table.
+            uint32_t nextHop = getRoute(header.destNodeID).nextHop;
+            // Store a copy of the packet along with its metadata.
+            storeAckPacket(header.packetID, buffer, offset, nextHop);
+        }
+    }
 }
 
 // ROUTING TABLE HELPER FUNCTIONS
@@ -667,4 +696,32 @@ bool AODVRouter::isNodeIDKnown(uint32_t packetID)
 void AODVRouter::saveNodeID(uint32_t packetID)
 {
     discoveredNodes.insert(packetID);
+}
+
+void AODVRouter::storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t length, uint32_t expectedNextHop)
+{
+    // Allocate memory for a copy of the packet.
+    uint8_t *packetCopy = (uint8_t *)pvPortMalloc(length);
+    if (packetCopy == nullptr)
+    {
+        Serial.println("[AODVRouter] Memory allocation failed for ACK packet copy");
+        return;
+    }
+    memcpy(packetCopy, packet, length);
+
+    // Store the packet copy in the ackBuffer along with its metadata.
+    ackBuffer[packetID] = {
+        packetCopy,
+        length,
+        expectedNextHop,
+        xTaskGetTickCount()};
+}
+
+bool AODVRouter::findAckPacket(uint32_t packetID)
+{
+    if (ackBuffer.find(packetID) != ackBuffer.end())
+    {
+        return true;
+    }
+    return false;
 }

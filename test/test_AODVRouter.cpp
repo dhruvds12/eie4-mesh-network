@@ -894,6 +894,81 @@ TEST(AODVRouterTest, ReceiveBroadcastInfoExceedMaxHops)
     ASSERT_TRUE(mockRadio.txPacketsSent.empty()) << "Nothing to be transmitted";
 }
 
+TEST(AODVRouterTest, ImplicitACKBufferTest)
+{
+    MockRadioManager mockRadio;
+    uint32_t myID = 100;
+    AODVRouter AODVRouter(&mockRadio, myID);
+    AODVRouter.updateRoute(400, 400, 1);
+    AODVRouter.updateRoute(150, 400, 2);
+    ASSERT_FALSE(AODVRouter._routeTable.empty()) << "Expected a new route to be added";
+    EXPECT_EQ(AODVRouter.hasRoute(400), true) << "Route to 5738 should have be added";
+    EXPECT_EQ(AODVRouter.hasRoute(150), true) << "Route to 5738 should have be added";
+
+    BaseHeader baseHdr;
+    baseHdr.destNodeID = 100;
+    baseHdr.srcNodeID = 499;
+    baseHdr.packetID = esp_random();
+    baseHdr.packetType = PKT_DATA;
+    baseHdr.flags = 0;
+    baseHdr.hopCount = 3;
+    baseHdr.reserved = 0;
+
+    DATAHeader dataHdr;
+    dataHdr.finalDestID = 150;
+
+    uint8_t buffer[255];
+    size_t offset = 0;
+
+    // Call handle packet
+    offset = serialiseBaseHeader(baseHdr, buffer);
+    offset = serialiseDATAHeader(dataHdr, buffer, offset);
+
+    const char *payloadData = "Test Payload";
+    size_t payloadDataLen = strlen(payloadData);
+    // Check that the payload will fit in the buffer.
+    ASSERT_LE(offset + payloadDataLen, sizeof(buffer)) << "Payload does not fit in buffer";
+    memcpy(buffer + offset, payloadData, payloadDataLen);
+    offset += payloadDataLen;
+
+    RadioPacket packet;
+    std::copy(buffer, buffer + offset, packet.data);
+    packet.len = offset;
+
+    AODVRouter.handlePacket(&packet);
+
+    ASSERT_FALSE(AODVRouter.ackBuffer.empty()) << "Empty ack buffer";
+
+    EXPECT_EQ(AODVRouter.findAckPacket(baseHdr.packetID), true) << "Could not find packet in ack buffer";
+
+    ackBufferEntry abe = AODVRouter.ackBuffer[baseHdr.packetID];
+
+    EXPECT_EQ(abe.expectedNextHop, 400) << "Incorrect next hop in ack buffer";
+    EXPECT_EQ(abe.length, packet.len) << "Incorrect packet length in ack buffer";
+
+    // check the packet
+
+    BaseHeader bh;
+    DATAHeader dh;
+    size_t newOffset = 0;
+    newOffset = deserialiseBaseHeader(abe.packet, bh);
+    newOffset = deserialiseDATAHeader(abe.packet, dh, newOffset);
+
+    EXPECT_EQ(bh.destNodeID, 400);
+    EXPECT_EQ(bh.hopCount, 4);
+    EXPECT_EQ(bh.packetID, baseHdr.packetID);
+    EXPECT_EQ(bh.packetType, PKT_DATA);
+    EXPECT_EQ(bh.srcNodeID, baseHdr.srcNodeID);
+
+    EXPECT_EQ(dh.finalDestID, dataHdr.finalDestID);
+
+    // extract the data
+    size_t dataLen = abe.length - newOffset;
+    EXPECT_EQ(dataLen, payloadDataLen) << "Payload length mismatch";
+    EXPECT_EQ(memcmp(abe.packet + newOffset, payloadData, dataLen), 0) << "Payload data mismatch";
+
+}
+
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);

@@ -23,6 +23,14 @@ struct dataBufferEntry
     size_t length;
 };
 
+struct ackBufferEntry
+{
+    uint8_t *packet; // store pointer to entire data
+    size_t length;
+    uint32_t expectedNextHop; // the next hop node you expect to forward the packet
+    TickType_t timestamp;     // time when the packet was sent
+};
+
 class AODVRouter
 {
 
@@ -73,6 +81,9 @@ private:
 
     // nodes on the network
     std::unordered_set<uint32_t> discoveredNodes;
+
+    // store messages that are waiting on ack
+    std::map<uint32_t, ackBufferEntry> ackBuffer;
 
     /**
      * @brief Router task function
@@ -212,6 +223,11 @@ private:
 
     void saveNodeID(uint32_t packetID);
 
+    // ACK BUFFER HELPER FUNCTIONS
+    void storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t length, uint32_t expectedNextHop);
+
+    bool findAckPacket(uint32_t packetID);
+
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
@@ -232,6 +248,7 @@ private:
     FRIEND_TEST(AODVRouterTest, SendBroadcastInfo);
     FRIEND_TEST(AODVRouterTest, ReceiveBroadcastInfo);
     FRIEND_TEST(AODVRouterTest, ReceiveBroadcastInfoExceedMaxHops);
+    FRIEND_TEST(AODVRouterTest, ImplicitACKBufferTest);
 #endif
 };
 
