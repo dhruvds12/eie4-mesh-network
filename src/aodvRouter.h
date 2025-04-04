@@ -79,11 +79,17 @@ private:
     // Handle periodic broadcasts timer
     TimerHandle_t _broadcastTimer;
 
+    // handle ackBuffer cleanup
+    TimerHandle_t _ackBufferCleanupTimer;
+
     // nodes on the network
     std::unordered_set<uint32_t> discoveredNodes;
 
     // store messages that are waiting on ack
     std::map<uint32_t, ackBufferEntry> ackBuffer;
+
+    static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000); // 10 minutes
+    static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
 
     /**
      * @brief Router task function
@@ -100,6 +106,10 @@ private:
     static void broadcastTimerCallback(TimerHandle_t xTimer);
 
     void sendBroadcastInfo();
+
+    void cleanupAckBuffer();
+    
+    static void ackCleanupCallback(TimerHandle_t xTimer);
 
     // TOP LEVEL RX PACKET HANDLERS
 

@@ -70,6 +70,26 @@ bool AODVRouter::begin()
         }
     }
 
+    _ackBufferCleanupTimer = xTimerCreate(
+        "AckCleanupTimer",
+        ACK_CLEANUP_PERIOD_TICKS, // runs every minute
+        pdTRUE,                   // Auto-reload for periodic execution
+        (void *)this,             // Pass the current router instance as timer ID
+        ackCleanupCallback        // Callback to perform ack cleanup
+    );
+
+    if (_ackBufferCleanupTimer == nullptr)
+    {
+        Serial.println("[AODVRouter] Failed to create ack cleanup timer");
+    }
+    else
+    {
+        if (xTimerStart(_ackBufferCleanupTimer, 0) != pdPASS)
+        {
+            Serial.println("[AODVRouter] Failed to start ack cleanup timer");
+        }
+    }
+
     return true;
 #endif
 }
@@ -111,11 +131,67 @@ void AODVRouter::sendBroadcastInfo()
     transmitPacket(bh, nullptr, 0, (const uint8_t *)info, infoLen);
 }
 
+void AODVRouter::cleanupAckBuffer()
+{
+    TickType_t now = xTaskGetTickCount();
+    // Create a temporary list of packetIDs to remove.
+    std::vector<uint32_t> expiredPackets;
+    
+    for (const auto &entry : ackBuffer)
+    {
+        // If the packet has been in the buffer longer than ACK_TIMEOUT_TICKS
+        if ((now - entry.second.timestamp) >= ACK_TIMEOUT_TICKS)
+        {
+            expiredPackets.push_back(entry.first);
+        }
+    }
+    
+    // Process all expired entries.
+    for (uint32_t packetID : expiredPackets)
+    {
+        // Retrieve the stored ack entry.
+        ackBufferEntry abe = ackBuffer[packetID];
+        
+        // Deserialize the BaseHeader from the stored packet.
+        BaseHeader baseHdr;
+        size_t offset = deserialiseBaseHeader(abe.packet, baseHdr);
+        
+        // Handle DATA packets (you can add similar logic for other packet types)
+        if (baseHdr.packetType == PKT_DATA)
+        {
+            DATAHeader dataHdr;
+            offset = deserialiseDATAHeader(abe.packet, dataHdr, offset);
+            
+            // Trigger a Route Error message for the unacknowledged packet.
+            // Here, we assume the broken node is the expected next hop.
+            sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, dataHdr.finalDestID, baseHdr.packetID);
+        }
+        else if (baseHdr.packetType == PKT_RREP)
+        {
+            // For RREP packets, extract the relevant header information.
+            RREPHeader rrep;
+            memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
+            sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
+        }
+        
+        // Remove the expired entry from ackBuffer.
+        ackBuffer.erase(packetID);
+    }
+}
+
+
 #ifndef UNIT_TEST
 void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
 {
     AODVRouter *router = (AODVRouter *)pvTimerGetTimerID(xTimer);
     router->sendBroadcastInfo();
+}
+
+// The timer callback for ack cleanup.
+void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
+{
+    AODVRouter *router = reinterpret_cast<AODVRouter *>(pvTimerGetTimerID(xTimer));
+    router->cleanupAckBuffer();
 }
 #endif
 
