@@ -1,3 +1,4 @@
+#include <WiFi.h>
 #include <RadioLib.h>
 #include <Adafruit_GFX.h>
 #include "HT_SSD1306Wire.h"
@@ -8,24 +9,87 @@
 #include "PingPongRouter.h"
 #include "aodvRouter.h"
 #include <esp_system.h>
-// #include <string>
+#include "wifiConfig.h"
 
-// TODO: uncomment the following only on one
-// of the nodes to initiate the pings
-// #define INITIATING_NODE
+// --- Function Prototypes ---
+void WIFISetUp();
+void WIFIScan();
 
-// Initialize DisplayManager with appropriate I2C pins and address
+// --- Other existing declarations ---
 DisplayManager displayManager;
+SX1262Config myRadio(8, 14, 12, 13);
+RadioManager radioManager(&myRadio);
+AODVRouter aodvRouter(&radioManager, []()
+                      { 
+  uint64_t mac = ESP.getEfuseMac();
+  return (uint32_t)(mac & 0xFFFFFFFF); }());
 
-// Create LoRaManager instance with the display reference
-// LoRaManager lora(displayManager);
+// --- WiFi Setup Function ---
+void WIFISetUp()
+{
+  // Disconnect from any previously connected WiFi
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoConnect(true);
 
-// QueueHandle_t radioRxQueue;
+  // Begin WiFi connection
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi...");
 
-// Pin mode Controls
+  // Wait for connection with a timeout counter
+  int count = 0;
+  while (WiFi.status() != WL_CONNECTED && count < 20)
+  {
+    Serial.print(".");
+    delay(500);
+    count++;
+  }
 
-/// @brief Turn Vext ON
-/// @param  void
+  // Check if connected
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("\nWiFi connected!");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+  }
+  else
+  {
+    Serial.println("\nWiFi connection failed!");
+  }
+}
+
+// --- WiFi Scan Function ---
+void WIFIScan()
+{
+  WiFi.mode(WIFI_STA);
+  Serial.println("Starting WiFi scan...");
+  int n = WiFi.scanNetworks();
+  if (n == 0)
+  {
+    Serial.println("No networks found");
+  }
+  else if (n >= 0)
+  {
+    Serial.print(n);
+    Serial.println(" networks found:");
+    for (int i = 0; i < n; i++)
+    {
+      Serial.print(i + 1);
+      Serial.print(": ");
+      Serial.print(WiFi.SSID(i));
+      Serial.print(" (");
+      Serial.print(WiFi.RSSI(i));
+      Serial.println(" dBm)");
+    }
+  }
+  else
+  {
+    Serial.printf("Error code %i\n", n);
+  }
+}
+
+// --- Vext Control Functions ---
 void VextON(void)
 {
   pinMode(Vext, OUTPUT);
@@ -33,62 +97,31 @@ void VextON(void)
   Serial.println("VextON");
 }
 
-/// @brief  Turn Vext OFF
-/// @param   void
-void VextOFF(void) // Vext default OFF
+void VextOFF(void)
 {
   pinMode(Vext, OUTPUT);
   digitalWrite(Vext, HIGH);
 }
 
-// void setupQueues()
-// {
-//   radioRxQueue = xQueueCreate(10, sizeof(LoRaManager::RadioPacket));
-//   if (radioRxQueue == NULL)
-//   {
-//     Serial.println("Failed to create radioRxQueue");
-//   }
-
-// }
-
-// Create a global radio driver instance.
-SX1262Config myRadio(8, 14, 12, 13);
-// SX1262Config myRadio(10, 2,3, 9);
-
-// Create the radio manager instance.
-RadioManager radioManager(&myRadio);
-
-// Create the ping-pong router instance.
-// PingPongRouter pingPongRouter(&radioManager);
-
-// Helper function to derive a unique node ID from the board's MAC address
-uint32_t getNodeID()
-{
-  // Retrieve the 64-bit MAC address from efuse
-  uint64_t mac = ESP.getEfuseMac();
-  // Use the lower 32 bits as the unique node ID
-  return (uint32_t)(mac & 0xFFFFFFFF);
-}
-
-// Instantiate the AODVRouter with the radio manager and node ID
-AODVRouter aodvRouter(&radioManager, getNodeID());
-
+// --- Main Setup Function ---
 void setup()
 {
   Serial.begin(115200);
-
-  // setup queues
-  // setupQueues();
-
   VextON();
   delay(100);
-  // Initialise the display (need to check the display code)
+
+  // Initialise display if needed
   displayManager.initialise();
   delay(100);
 
-  // initialize SX1262 LoRa module
-  // lora.begin();
+  // Setup WiFi: Connect and optionally scan networks
+  WIFISetUp();
+  WiFi.disconnect(); //
+  WiFi.mode(WIFI_STA);
+  delay(100);
+  WIFIScan();
 
+  // Initialize the radio manager
   if (!radioManager.begin())
   {
     Serial.println("Radio Manager initialization failed!");
@@ -98,10 +131,10 @@ void setup()
     }
   }
 
-  // Start the ping-pong router task.
+  // Start the AODV router
   if (!aodvRouter.begin())
   {
-    Serial.println("PingPong Router initialization failed!");
+    Serial.println("AODV Router initialization failed!");
     while (1)
     {
       vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -109,18 +142,17 @@ void setup()
   }
 
 #if defined(INITIATING_NODE)
-  // send the first packet on this node
+  // Send the first packet on this node
   const char initMsg[] = "PING";
   radioManager.enqueueTxPacket((const uint8_t *)initMsg, sizeof(initMsg) - 1);
-  // lora.transmitSYNC1();
 #else
-  // start listening for LoRa packets on this node
-  // lora.startReceive();
   Serial.println("Listening");
 #endif
 }
 
+// --- Main Loop ---
 void loop()
 {
-  // lora.update();
+  // Insert your LoRa update or router processing code here.
+  // You can also perform API requests using WiFi here as needed.
 }
