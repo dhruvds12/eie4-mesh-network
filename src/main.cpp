@@ -14,7 +14,7 @@
 
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
-#define BLUETOOTH
+// #define BLUETOOTH
 
 #ifdef BLUETOOTH
 #include "BluetoothManager.h"
