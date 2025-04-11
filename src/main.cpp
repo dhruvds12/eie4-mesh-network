@@ -10,10 +10,8 @@
 #include "aodvRouter.h"
 #include <esp_system.h>
 #include "wifiConfig.h"
+#include "wifiManager.h"
 
-// --- Function Prototypes ---
-void WIFISetUp();
-void WIFIScan();
 
 // --- Other existing declarations ---
 DisplayManager displayManager;
@@ -23,71 +21,6 @@ AODVRouter aodvRouter(&radioManager, []()
                       { 
   uint64_t mac = ESP.getEfuseMac();
   return (uint32_t)(mac & 0xFFFFFFFF); }());
-
-// --- WiFi Setup Function ---
-void WIFISetUp()
-{
-  // Disconnect from any previously connected WiFi
-  WiFi.disconnect(true);
-  delay(100);
-  WiFi.mode(WIFI_STA);
-  WiFi.setAutoConnect(true);
-
-  // Begin WiFi connection
-  WiFi.begin(ssid, password);
-  Serial.println("Connecting to WiFi...");
-
-  // Wait for connection with a timeout counter
-  int count = 0;
-  while (WiFi.status() != WL_CONNECTED && count < 20)
-  {
-    Serial.print(".");
-    delay(500);
-    count++;
-  }
-
-  // Check if connected
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    Serial.println("\nWiFi connected!");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-  }
-  else
-  {
-    Serial.println("\nWiFi connection failed!");
-  }
-}
-
-// --- WiFi Scan Function ---
-void WIFIScan()
-{
-  WiFi.mode(WIFI_STA);
-  Serial.println("Starting WiFi scan...");
-  int n = WiFi.scanNetworks();
-  if (n == 0)
-  {
-    Serial.println("No networks found");
-  }
-  else if (n >= 0)
-  {
-    Serial.print(n);
-    Serial.println(" networks found:");
-    for (int i = 0; i < n; i++)
-    {
-      Serial.print(i + 1);
-      Serial.print(": ");
-      Serial.print(WiFi.SSID(i));
-      Serial.print(" (");
-      Serial.print(WiFi.RSSI(i));
-      Serial.println(" dBm)");
-    }
-  }
-  else
-  {
-    Serial.printf("Error code %i\n", n);
-  }
-}
 
 // --- Vext Control Functions ---
 void VextON(void)
@@ -114,12 +47,21 @@ void setup()
   displayManager.initialise();
   delay(100);
 
-  // Setup WiFi: Connect and optionally scan networks
-  WIFISetUp();
-  WiFi.disconnect(); //
-  WiFi.mode(WIFI_STA);
-  delay(100);
-  WIFIScan();
+ // First, scan and print available WiFi networks.
+ Serial.println("Scanning for available WiFi networks...");
+ wifiPrintNetworks();
+ delay(500);
+ 
+ // Then attempt to connect to the network using the credentials from wifiConfig.h.
+ bool wifiConnected = wifiConnect(ssid, password);
+ 
+ // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
+ if (!wifiConnected) {
+   Serial.println("WiFi connection failed. MQTT services will not be started.");
+   // You might choose to retry, or continue with alternative logic.
+ } else {
+    // add logic for mqtt client setup here.... 
+ }
 
   // Initialize the radio manager
   if (!radioManager.begin())
