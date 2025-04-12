@@ -11,6 +11,7 @@
 #include <esp_system.h>
 #include "wifiConfig.h"
 #include "wifiManager.h"
+#include "mqttManager.h"
 
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
@@ -55,6 +56,9 @@ void VextOFF(void)
 void setup()
 {
   Serial.begin(115200);
+  Serial.print("ESP-IDF Version: ");
+  Serial.println(esp_get_idf_version());
+  Serial.begin(115200);
   VextON();
   delay(100);
 
@@ -62,21 +66,25 @@ void setup()
   displayManager.initialise();
   delay(100);
 
- // First, scan and print available WiFi networks.
- Serial.println("Scanning for available WiFi networks...");
- wifiPrintNetworks();
- delay(500);
- 
- // Then attempt to connect to the network using the credentials from wifiConfig.h.
- bool wifiConnected = wifiConnect(ssid, password);
- 
- // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
- if (!wifiConnected) {
-   Serial.println("WiFi connection failed. MQTT services will not be started.");
-   // You might choose to retry, or continue with alternative logic.
- } else {
-    // add logic for mqtt client setup here.... 
- }
+  // First, scan and print available WiFi networks.
+  Serial.println("Scanning for available WiFi networks...");
+  wifiPrintNetworks();
+  delay(500);
+
+  // Then attempt to connect to the network using the credentials from wifiConfig.h.
+  bool wifiConnected = wifiConnect(ssid, password);
+
+  // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
+  if (!wifiConnected)
+  {
+    Serial.println("WiFi connection failed. MQTT services will not be started.");
+    // You might choose to retry, or continue with alternative logic.
+    }
+  else
+  {
+    // add logic for mqtt client setup here....
+    mqttManager.begin();
+  }
 
 #ifdef BLUETOOTH
   // Initialize BLE using our abstraction.
@@ -123,4 +131,12 @@ void loop()
   Serial.print("Connected count: ");
   Serial.println(btManager.getServer()->getConnectedCount());
 #endif
+  static unsigned long lastPublishTime = 0;
+  if (millis() - lastPublishTime > 5000)
+  {
+    lastPublishTime = millis();
+    mqttManager.publishMessage("hardware/to/simulation", "Hardware Status: Idle");
+    Serial.println("Published hardware status");
+  }
+  delay(100);
 }
