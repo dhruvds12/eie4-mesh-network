@@ -1,6 +1,10 @@
 #include "mqttManager.h"
 #include <string.h>
 // TODO: Using old version of the ESP-IDF library do not have MQTT v5
+// WIP - likely will need to clone esp-idf v5.1 and add arduino as a component to maintain functionality
+
+extern uint32_t getNodeID();
+
 // Initialise static instance pointer to NULL.
 MQTTManager *MQTTManager::instance = nullptr;
 
@@ -59,8 +63,28 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
     {
     case MQTT_EVENT_CONNECTED:
         Serial.println("MQTT_EVENT_CONNECTED");
-        // Subscribe to the specified topic after connection.
+        // Subscribe to the configured subscription topic.
         esp_mqtt_client_subscribe(mgr->client, mgr->subscribeTopic, 0);
+
+        // Build the registration message.
+        // Format: {"node_id": "node123", "command_topic": "physical/node123/command",
+        //          "status_topic": "physical/node123/status", "event": "register", "lat": 1000, "long": 1000}
+        {
+            char reg_msg[256];
+            uint32_t nodeId = getNodeID();
+            // Here we use sprintf to embed the nodeID into the registration JSON.
+            sprintf(reg_msg,
+                    "{\"node_id\": \"%u\", "
+                    "\"command_topic\": \"physical/node%u/command\", "
+                    "\"status_topic\": \"physical/node%u/status\", "
+                    "\"event\": \"register\", "
+                    "\"lat\": 1000, \"long\": 1000}",
+                    nodeId, nodeId, nodeId);
+
+            // Publish the registration message to the registration topic.
+            esp_mqtt_client_publish(mgr->client, REGISTRATION_TOPIC, reg_msg, 0, 0, 0);
+            Serial.printf("Published registration message: %s\n", reg_msg);
+        }
         break;
 
     case MQTT_EVENT_DATA:

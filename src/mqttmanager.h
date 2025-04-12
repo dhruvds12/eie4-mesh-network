@@ -14,6 +14,9 @@ extern "C"
 #define MQTT_TOPIC_MAX_LEN 128
 #define MQTT_PAYLOAD_MAX_LEN 512
 
+#define REGISTRATION_TOPIC "simulation/register"
+
+
 typedef struct
 {
     char topic[MQTT_TOPIC_MAX_LEN];
