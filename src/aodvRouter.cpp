@@ -280,7 +280,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
 
     if (bh.destNodeID != BROADCAST_ADDR && bh.destNodeID != _myNodeID)
     {
-        Serial.println("[AODVRouter] Not a message for me");
+        Serial.printf("[AODVRouter] Not a message for me bh.destnodeid: %u\n", bh.destNodeID);
         return;
     }
 

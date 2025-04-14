@@ -22,6 +22,7 @@ public:
     virtual ~IRadioManager() {}
 
     virtual bool enqueueTxPacket(const uint8_t *data, size_t len) = 0;
+    virtual bool enqueueRxPacket(const uint8_t *data, size_t len) = 0;
     virtual bool dequeueRxPacket(RadioPacket **packet) = 0;
 };
 

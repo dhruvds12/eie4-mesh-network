@@ -15,10 +15,10 @@ struct BaseHeader
     uint32_t destNodeID; // 4 bytes
     uint32_t srcNodeID;  // 4 bytes
     uint32_t packetID;   // 4 bytes
-    uint8_t packetType;  // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
-    uint8_t flags;       // 1 byte: bitmask for options (e.g., WantAck)
-    uint8_t hopCount;    // 1 byte: TTL/hop count
-    uint8_t reserved;    // 1 byte: reserved
+    uint8_t  packetType;  // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
+    uint8_t  flags;       // 1 byte: bitmask for options (e.g., WantAck)
+    uint8_t  hopCount;    // 1 byte: TTL/hop count
+    uint8_t  reserved;    // 1 byte: reserved
 };
 
 // Extended header for RREQ (8 bytes)
@@ -37,7 +37,7 @@ struct RREPHeader
     uint32_t originNodeID;   // 4 bytes: original rreq requester
     uint32_t RREPDestNodeID; // 4 bytes: destination of route
     uint16_t lifetime;       // 2 bytes: route lifetime
-    uint8_t numHops;         // 1 byte:  Number of hops using this route
+    uint8_t  numHops;         // 1 byte:  Number of hops using this route
 };
 #pragma pack(pop)
 

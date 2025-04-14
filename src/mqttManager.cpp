@@ -1,5 +1,6 @@
 #include "mqttManager.h"
 #include <string.h>
+
 // TODO: Using old version of the ESP-IDF library do not have MQTT v5
 // WIP - likely will need to clone esp-idf v5.1 and add arduino as a component to maintain functionality
 
@@ -9,8 +10,8 @@ extern uint32_t getNodeID();
 MQTTManager *MQTTManager::instance = nullptr;
 
 // Constructor: store configuration and create a FreeRTOS queue.
-MQTTManager::MQTTManager(const char *brokerURI, const char *subscribeTopic)
-    : brokerURI(brokerURI), subscribeTopic(subscribeTopic), client(nullptr)
+MQTTManager::MQTTManager(const char *brokerURI, const char *subscribeTopic, IRadioManager *radioManager)
+    : brokerURI(brokerURI), subscribeTopic(subscribeTopic), client(nullptr), _radioManager(radioManager)
 {
     // Create a queue capable of holding 10 messages.
     messageQueue = xQueueCreate(10, sizeof(mqtt_message_t));
@@ -89,7 +90,7 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
 
     case MQTT_EVENT_DATA:
     {
-        Serial.println("MQTT_EVENT_DATA received");
+        Serial.printf("MQTT_EVENT_DATA received: data_len=%d\n", event->data_len);
         mqtt_message_t msg;
         memset(&msg, 0, sizeof(msg));
 
@@ -102,6 +103,12 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
         int p_len = (event->data_len < MQTT_PAYLOAD_MAX_LEN - 1) ? event->data_len : MQTT_PAYLOAD_MAX_LEN - 1;
         memcpy(msg.payload, event->data, p_len);
         msg.payload[p_len] = '\0';
+        msg.payload_len = p_len;
+        for (int i = 0; i < p_len; i++)
+        {
+            Serial.printf("%02x", msg.payload[i]);
+        }
+        Serial.println();
 
         // Place the message into the queue for later processing.
         if (xQueueSend(mgr->messageQueue, &msg, 0) != pdTRUE)
@@ -134,6 +141,13 @@ void MQTTManager::mqttQueueTask(void *pvParameters)
 void MQTTManager::processMessage(const mqtt_message_t &msg)
 {
     Serial.printf("Processing MQTT message:\n  Topic: %s\n  Payload: %s\n", msg.topic, msg.payload);
+    bool success = _radioManager->enqueueRxPacket((const uint8_t *)msg.payload, msg.payload_len);
+    if (success)
+    {
+        Serial.println("Enqueued RX packet successfully!");
+    }
+    else
+    {
+        Serial.println("Failed to enqueue RX packet!");
+    }
 }
-
-MQTTManager mqttManager("mqtt://132.145.67.221:1883", "simulation/to/hardware");

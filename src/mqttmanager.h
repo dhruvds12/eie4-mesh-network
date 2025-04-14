@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "IRadioManager.h"
 
 extern "C"
 {
@@ -16,18 +17,18 @@ extern "C"
 
 #define REGISTRATION_TOPIC "simulation/register"
 
-
 typedef struct
 {
     char topic[MQTT_TOPIC_MAX_LEN];
     char payload[MQTT_PAYLOAD_MAX_LEN];
+    int  payload_len;
 } mqtt_message_t;
 
 class MQTTManager
 {
 public:
     // Constructor
-    MQTTManager(const char *brokerURI, const char *subscribeTopic);
+    MQTTManager(const char *brokerURI, const char *subscribeTopic, IRadioManager *RadioManager);
 
     // Begin
     void begin();
@@ -38,6 +39,7 @@ public:
 private:
     const char *brokerURI;
     const char *subscribeTopic;
+    IRadioManager *_radioManager;
 
     esp_mqtt_client_handle_t client;
     QueueHandle_t messageQueue;
@@ -55,6 +57,6 @@ private:
     static MQTTManager *instance;
 };
 
-extern MQTTManager mqttManager;
+extern MQTTManager *mqttManager;
 
 #endif

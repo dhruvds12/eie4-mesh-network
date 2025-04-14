@@ -40,7 +40,7 @@ public:
         return false;
     }
 
-    void pushRxPacket(const uint8_t *data, size_t len)
+    void enqueueRxPacket(const uint8_t *data, size_t len)
     {
         RadioPacket p;
         memcpy(p.data, data, len);

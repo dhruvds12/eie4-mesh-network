@@ -38,6 +38,8 @@ public:
 
     bool dequeueRxPacket(RadioPacket **packet);
 
+    bool enqueueRxPacket(const uint8_t *data, size_t len);
+
     QueueHandle_t getRxQueue() const { return _rxQueue; }
 
     QueueHandle_t getTxQueue() const { return _txQueue; }

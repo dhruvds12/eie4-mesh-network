@@ -40,6 +40,8 @@ SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 AODVRouter aodvRouter(&radioManager, getNodeID());
 
+MQTTManager *mqttManager = nullptr;
+
 void VextON(void)
 {
   pinMode(Vext, OUTPUT);
@@ -62,6 +64,8 @@ void setup()
   VextON();
   delay(100);
 
+  Serial.printf("NODE ID: %d\n", getNodeID());
+
   // Initialise display if needed
   displayManager.initialise();
   delay(100);
@@ -74,16 +78,22 @@ void setup()
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
 
+  char subscribeTopic[64];
+  sprintf(subscribeTopic, "physical/node%d/status", getNodeID());
+
+  // Create the MQTTManager instance with the dynamically built subscribe topic.
+  mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", subscribeTopic, &radioManager);
+
   // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
   if (!wifiConnected)
   {
     Serial.println("WiFi connection failed. MQTT services will not be started.");
     // You might choose to retry, or continue with alternative logic.
-    }
+  }
   else
   {
     // add logic for mqtt client setup here....
-    mqttManager.begin();
+    mqttManager->begin();
   }
 
 #ifdef BLUETOOTH
@@ -131,12 +141,12 @@ void loop()
   Serial.print("Connected count: ");
   Serial.println(btManager.getServer()->getConnectedCount());
 #endif
-  static unsigned long lastPublishTime = 0;
-  if (millis() - lastPublishTime > 5000)
-  {
-    lastPublishTime = millis();
-    mqttManager.publishMessage("hardware/to/simulation", "Hardware Status: Idle");
-    Serial.println("Published hardware status");
-  }
-  delay(100);
+  // static unsigned long lastPublishTime = 0;
+  // if (millis() - lastPublishTime > 5000)
+  // {
+  //   lastPublishTime = millis();
+  //   mqttManager->publishMessage("hardware/to/simulation", "Hardware Status: Idle");
+  //   Serial.println("Published hardware status");
+  // }
+  // delay(100);
 }

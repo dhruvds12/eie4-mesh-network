@@ -114,6 +114,32 @@ bool RadioManager::dequeueRxPacket(RadioPacket **packet)
     return false;
 }
 
+bool RadioManager::enqueueRxPacket(const uint8_t *data, size_t len)
+{
+    RadioPacket *packet = (RadioPacket *)pvPortMalloc(sizeof(RadioPacket));
+    if (packet == nullptr)
+    {
+        Serial.println("[RadioManager] Could not allocate memory for packet!");
+        return false;
+    }
+    if (len > sizeof(packet->data))
+    {
+        Serial.println("[RadioManager] Packet too large!");
+        vPortFree(packet);
+        return false;
+    }
+
+    memcpy(packet->data, data, len);
+    packet->len = len;
+    if (xQueueSend(_rxQueue, &packet, 0) != pdPASS)
+    {
+        Serial.println("[RadioManager] Could not send packet to TX queue!");
+        vPortFree(packet);
+        return false;
+    }
+    return true;
+}
+
 bool RadioManager::sendPacket(const uint8_t *data, size_t len)
 {
 
