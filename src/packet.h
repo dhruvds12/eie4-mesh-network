@@ -63,6 +63,12 @@ struct DATAHeader
     uint32_t finalDestID; // 4 bytes: final intended target
 };
 
+struct BROADCASTINFOHeader
+{
+    uint32_t originNodeID;
+};
+
+// TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
 // Serialisation and deserialisation functions:
 inline size_t serialiseBaseHeader(const BaseHeader &header, uint8_t *buffer)
 {
@@ -196,6 +202,20 @@ inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_
 inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, size_t offset)
 {
     memcpy(&data.finalDestID, buffer + offset, 4);
+    offset += 4;
+    return offset;
+}
+
+inline size_t serialiseBroadcastInfoHeader(const BROADCASTINFOHeader &data, uint8_t *buffer, size_t offset)
+{
+    memcpy(buffer + offset, &data.originNodeID, 4);
+    offset += 4;
+    return offset;
+}
+
+inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, BROADCASTINFOHeader &data, size_t offset)
+{
+    memcpy(&data.originNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }

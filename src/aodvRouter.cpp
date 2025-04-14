@@ -124,11 +124,14 @@ void AODVRouter::sendBroadcastInfo()
     bh.hopCount = 0;
     bh.reserved = 0;
 
+    BROADCASTINFOHeader bih;
+    bih.originNodeID = _myNodeID;
+
     const char *info = "Node active; connected users: user1, user2";
     size_t infoLen = strlen(info);
 
     // Use the transmitPacket method to send the broadcast
-    transmitPacket(bh, nullptr, 0, (const uint8_t *)info, infoLen);
+    transmitPacket(bh, (uint8_t *)&bih, sizeof(BROADCASTINFOHeader), (const uint8_t *)info, infoLen);
 }
 
 void AODVRouter::cleanupAckBuffer()
@@ -520,16 +523,32 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
 
 void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payload, size_t payloadLen)
 {
+
+    BROADCASTINFOHeader bih;
+    memcpy(&bih, payload, sizeof(BROADCASTINFOHeader));
+
     if (!isNodeIDKnown(base.srcNodeID))
     {
         saveNodeID(base.srcNodeID);
     }
 
+    if (!isNodeIDKnown(bih.originNodeID))
+    {
+        saveNodeID(bih.originNodeID);
+    }
+
     Serial.printf("[AODVRouter] Received BroadcastInfo. PayloadLen=%u\n", (unsigned)payloadLen);
     Serial.printf("[AODVRouter] Info: %.*s\n", (int)payloadLen, (const char *)payload);
 
+    // update the routing table
+    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+
+    // update route to the originNode
+    updateRoute(bih.originNodeID, base.srcNodeID, base.hopCount + 1);
+
     // increment number of hops
     BaseHeader fwd = base;
+    fwd.srcNodeID = _myNodeID; // replace your node id and store the originNodeID in the bih header
     fwd.hopCount++;
 
     // check number of hops
@@ -540,7 +559,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     }
 
     // forward the message, keep src id as the same
-    transmitPacket(fwd, (const uint8_t *)nullptr, 0, payload, payloadLen);
+    transmitPacket(fwd, (uint8_t *)&bih, sizeof(BROADCASTINFOHeader), payload, payloadLen);
 }
 
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR

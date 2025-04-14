@@ -74,7 +74,7 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
             uint32_t nodeId = getNodeID();
             // Here we use sprintf to embed the nodeID into the registration JSON.
             sprintf(reg_msg,
-                    "{\"node_id\": \"%u\", "
+                    "{\"node_id\": %u, "
                     "\"command_topic\": \"physical/node%u/command\", "
                     "\"status_topic\": \"physical/node%u/status\", "
                     "\"event\": \"register\", "
