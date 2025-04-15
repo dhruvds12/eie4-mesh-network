@@ -21,7 +21,7 @@ typedef struct
 {
     char topic[MQTT_TOPIC_MAX_LEN];
     char payload[MQTT_PAYLOAD_MAX_LEN];
-    int  payload_len;
+    int payload_len;
 } mqtt_message_t;
 
 class MQTTManager
@@ -36,19 +36,29 @@ public:
     // Publish Messages to any topic
     void publishMessage(const char *topic, const char *payload);
 
+    // Enque to send queue
+    void enqueueSendMQTTQueue(const char *payload, int payload_len);
+
+    bool connected = false;
+
 private:
     const char *brokerURI;
     const char *subscribeTopic;
+    char sendTopic[64];
     IRadioManager *_radioManager;
 
     esp_mqtt_client_handle_t client;
-    QueueHandle_t messageQueue;
+    QueueHandle_t receivedMQTTMessageQueue;
+    QueueHandle_t sendMQTTMessageQueue;
 
     // static event handler for the esp-idf MQTT client
     static void mqttEventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data);
 
     // Task function to process the queue
-    static void mqttQueueTask(void *pvParametere);
+    static void receivedMQTTQueueTask(void *pvParametere);
+
+    // Task function to process the queue
+    static void sendMQTTQueueTask(void *pvParametere);
 
     // Process an individual MQTT message
     void processMessage(const mqtt_message_t &msg);

@@ -14,10 +14,16 @@ MQTTManager::MQTTManager(const char *brokerURI, const char *subscribeTopic, IRad
     : brokerURI(brokerURI), subscribeTopic(subscribeTopic), client(nullptr), _radioManager(radioManager)
 {
     // Create a queue capable of holding 10 messages.
-    messageQueue = xQueueCreate(10, sizeof(mqtt_message_t));
-    if (messageQueue == NULL)
+    receivedMQTTMessageQueue = xQueueCreate(10, sizeof(mqtt_message_t));
+    if (receivedMQTTMessageQueue == NULL)
     {
-        Serial.println("Failed to create MQTT message queue");
+        Serial.println("Failed to create receive MQTT message queue");
+    }
+
+    sendMQTTMessageQueue = xQueueCreate(10, sizeof(mqtt_message_t));
+    if (sendMQTTMessageQueue == NULL)
+    {
+        Serial.println("Failed to create send MQTT message queue");
     }
     // Save the singleton instance pointer.
     instance = this;
@@ -36,7 +42,8 @@ void MQTTManager::begin()
     esp_mqtt_client_start(client);
 
     // Create a FreeRTOS task to process incoming MQTT messages.
-    xTaskCreate(MQTTManager::mqttQueueTask, "MQTTQueueTask", 4096, this, 1, NULL);
+    xTaskCreate(MQTTManager::receivedMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 3, NULL);
+    xTaskCreate(MQTTManager::sendMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 3, NULL);
 
     Serial.println("MQTT Manager started.");
 }
@@ -52,6 +59,24 @@ void MQTTManager::publishMessage(const char *topic, const char *payload)
     esp_mqtt_client_publish(client, topic, payload, 0, 0, 0);
 }
 
+void MQTTManager::enqueueSendMQTTQueue(const char *payload, int payload_len)
+{
+    mqtt_message_t msg;
+    // Ensure we do not exceed the buffer size.
+    int p_len = (payload_len < MQTT_PAYLOAD_MAX_LEN) ? payload_len : MQTT_PAYLOAD_MAX_LEN;
+    memcpy(msg.payload, payload, p_len);
+    msg.payload_len = p_len;
+    // For binary data, we omit null termination unless required.
+    // msg.payload[p_len] = '\0';
+
+    // Enqueue to the send queue (NOT the received queue).
+    if (xQueueSend(sendMQTTMessageQueue, &msg, 0) != pdTRUE)
+    {
+        Serial.println("Failed to queue MQTT send message");
+    }
+    Serial.println("Sent message over MQTT");
+}
+
 // Static event handler called on MQTT events.
 void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
                                    int32_t event_id, void *event_data)
@@ -64,9 +89,10 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
     {
     case MQTT_EVENT_CONNECTED:
         Serial.println("MQTT_EVENT_CONNECTED");
+        mgr->connected = true;
         // Subscribe to the configured subscription topic.
         esp_mqtt_client_subscribe(mgr->client, mgr->subscribeTopic, 0);
-
+        snprintf(mgr->sendTopic, sizeof(mgr->sendTopic), "physical/node%d/command", getNodeID());
         // Build the registration message.
         // Format: {"node_id": "node123", "command_topic": "physical/node123/command",
         //          "status_topic": "physical/node123/status", "event": "register", "lat": 1000, "long": 1000}
@@ -111,12 +137,17 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
         Serial.println();
 
         // Place the message into the queue for later processing.
-        if (xQueueSend(mgr->messageQueue, &msg, 0) != pdTRUE)
+        if (xQueueSend(mgr->receivedMQTTMessageQueue, &msg, 0) != pdTRUE)
         {
             Serial.println("Failed to queue MQTT message");
         }
         break;
     }
+
+    case MQTT_EVENT_DISCONNECTED:
+        // set some variable so that mqtt actions are stopped
+        mgr->connected = false;
+        break;
 
     default:
         break;
@@ -124,15 +155,28 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
 }
 
 // FreeRTOS task function to process messages from the MQTT queue.
-void MQTTManager::mqttQueueTask(void *pvParameters)
+void MQTTManager::receivedMQTTQueueTask(void *pvParameters)
 {
     MQTTManager *mgr = (MQTTManager *)pvParameters;
     mqtt_message_t msg;
     for (;;)
     {
-        if (xQueueReceive(mgr->messageQueue, &msg, portMAX_DELAY) == pdTRUE)
+        if (xQueueReceive(mgr->receivedMQTTMessageQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
             mgr->processMessage(msg);
+        }
+    }
+}
+
+void MQTTManager::sendMQTTQueueTask(void *pvParameters)
+{
+    MQTTManager *mgr = (MQTTManager *)pvParameters;
+    mqtt_message_t msg;
+    for (;;)
+    {
+        if (xQueueReceive(mgr->sendMQTTMessageQueue, &msg, portMAX_DELAY) == pdTRUE)
+        {
+            mgr->publishMessage(mgr->sendTopic, msg.payload);
         }
     }
 }

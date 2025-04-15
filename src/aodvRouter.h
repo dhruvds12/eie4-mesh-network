@@ -7,6 +7,7 @@
 #include <vector>
 #include <FreeRTOS.h>
 #include <unordered_set>
+#include "mqttmanager.h"
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
@@ -41,7 +42,7 @@ public:
      * @param RadioManager
      * @param myNodeID
      */
-    AODVRouter(IRadioManager *RadioManager, uint32_t myNodeID);
+    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager,uint32_t myNodeID);
 
     /**
      * @brief Initialise and create the router task
@@ -62,10 +63,13 @@ public:
 
     void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
 
+    void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
+
 private:
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
     TaskHandle_t _routerTaskHandler;
+    MQTTManager *_mqttManager;
 
     // routeTable[dest] = RouteEntry
     std::map<uint32_t, RouteEntry> _routeTable;

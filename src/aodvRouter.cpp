@@ -13,8 +13,8 @@ static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
-AODVRouter::AODVRouter(IRadioManager *radioManager, uint32_t myNodeID)
-    : _radioManager(radioManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr)
+AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID)
+    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr)
 {
 }
 
@@ -685,7 +685,10 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
         offset += payloadLen;
     }
     Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
-
+    if (_mqttManager != nullptr && _mqttManager->connected)
+    {
+        _mqttManager->enqueueSendMQTTQueue(reinterpret_cast<const char *>(buffer), offset);
+    }
     // Now send the complete packet to the radio manager.
     bool queued = _radioManager->enqueueTxPacket(buffer, offset);
     if (!queued)

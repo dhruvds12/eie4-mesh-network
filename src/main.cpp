@@ -38,9 +38,8 @@ uint32_t getNodeID()
 DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
-AODVRouter aodvRouter(&radioManager, getNodeID());
-
 MQTTManager *mqttManager = nullptr;
+AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID());
 
 void VextON(void)
 {
@@ -94,6 +93,7 @@ void setup()
   {
     // add logic for mqtt client setup here....
     mqttManager->begin();
+    aodvRouter.setMQTTManager(mqttManager);
   }
 
 #ifdef BLUETOOTH
