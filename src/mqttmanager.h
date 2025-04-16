@@ -6,6 +6,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "IRadioManager.h"
+#include <ArduinoJson.h>
 
 extern "C"
 {
@@ -14,6 +15,10 @@ extern "C"
 
 #define MQTT_TOPIC_MAX_LEN 128
 #define MQTT_PAYLOAD_MAX_LEN 512
+
+static const uint8_t ACTION_MESSAGE = 0x01;
+static const uint8_t ACTION_UPDATE_ROUTE = 0x02;
+static const uint8_t ACTION_INVALIDATE_ROUTE = 0x03;
 
 #define REGISTRATION_TOPIC "simulation/register"
 
@@ -34,12 +39,16 @@ public:
     void begin();
 
     // Publish Messages to any topic
-    void publishMessage(const char *topic, const char *payload);
+    void publishMessage(const char *topic, const char *payload, int payload_len);
 
     // Enque to send queue
     void enqueueSendMQTTQueue(const char *payload, int payload_len);
 
     bool connected = false;
+
+    void publishUpdateRoute(uint32_t dest, uint32_t nextHop, uint8_t hopCount);
+    void publishInvalidateRoute(uint32_t dest);
+    void publishPacket(uint32_t packetID, const uint8_t *buffer, size_t length);
 
 private:
     const char *brokerURI;

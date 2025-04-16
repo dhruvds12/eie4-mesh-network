@@ -687,7 +687,9 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
     Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
     if (_mqttManager != nullptr && _mqttManager->connected)
     {
-        _mqttManager->enqueueSendMQTTQueue(reinterpret_cast<const char *>(buffer), offset);
+        uint8_t localCopy[255];
+        memcpy(localCopy, buffer, offset);
+        _mqttManager->publishPacket(header.packetID, localCopy, offset);
     }
     // Now send the complete packet to the radio manager.
     bool queued = _radioManager->enqueueTxPacket(buffer, offset);
@@ -720,6 +722,11 @@ void AODVRouter::updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hop
         RouteEntry re{nextHop, hopCount};
         _routeTable[destination] = re;
         Serial.printf("[AODVRouter] Added route to %u via %u, hopCount=%u\n", destination, nextHop, hopCount);
+        if (_mqttManager != nullptr && _mqttManager->connected)
+        {
+            // send the new routeEntry over mqtt
+            _mqttManager->publishUpdateRoute(destination, nextHop, hopCount);
+        }
     }
     else
     {
@@ -729,6 +736,11 @@ void AODVRouter::updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hop
             it->second.nextHop = nextHop;
             it->second.hopcount = hopCount;
             Serial.printf("[AODVRouter] Updated route to %u via %u, hopCount=%u\n", destination, nextHop, hopCount);
+            if (_mqttManager != nullptr && _mqttManager->connected)
+            {
+                // send the new routeEntry over mqtt
+                _mqttManager->publishUpdateRoute(destination, nextHop, hopCount);
+            }
         }
     }
 }
@@ -747,6 +759,11 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
 {
     // remove any routes to the broken node
     _routeTable.erase(brokenNodeID);
+    if (_mqttManager != nullptr && _mqttManager->connected)
+    {
+        // send the key that needs to be removed from simulation
+        _mqttManager->publishInvalidateRoute(brokenNodeID);
+    }
 
     // Remove any routes that have the brokenNode as the nextHop
     for (auto it = _routeTable.begin(); it != _routeTable.end();)
@@ -754,6 +771,11 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
         if (it->second.nextHop == brokenNodeID)
         {
             it = _routeTable.erase(it);
+            if (_mqttManager != nullptr && _mqttManager->connected)
+            {
+                // send the key that needs to be removed from simulation
+                _mqttManager->publishInvalidateRoute(it->first);
+            }
         }
         else
         {
@@ -765,6 +787,14 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
     // The issue is because we do not know the route we took with this message
     // we have to make some assumptions about the current routes that everyone has stored
     // Need to assume that everyones routeTable is unchanged.
+
+    // Decided to remove route to destination node
+    _routeTable.erase(finalDestNodeID);
+    if (_mqttManager != nullptr && _mqttManager->connected)
+    {
+        // send the key that needs to be removed from simulation
+        _mqttManager->publishInvalidateRoute(finalDestNodeID);
+    }
 
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)
 }

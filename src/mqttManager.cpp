@@ -43,20 +43,20 @@ void MQTTManager::begin()
 
     // Create a FreeRTOS task to process incoming MQTT messages.
     xTaskCreate(MQTTManager::receivedMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 3, NULL);
-    xTaskCreate(MQTTManager::sendMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 3, NULL);
+    xTaskCreate(MQTTManager::sendMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 2, NULL);
 
     Serial.println("MQTT Manager started.");
 }
 
 // Publish a message to a given topic.
-void MQTTManager::publishMessage(const char *topic, const char *payload)
+void MQTTManager::publishMessage(const char *topic, const char *payload, int payload_len)
 {
     if (client == nullptr)
     {
         Serial.println("MQTT client not initialized");
         return;
     }
-    esp_mqtt_client_publish(client, topic, payload, 0, 0, 0);
+    esp_mqtt_client_publish(client, topic, payload, payload_len, 0, 0);
 }
 
 void MQTTManager::enqueueSendMQTTQueue(const char *payload, int payload_len)
@@ -67,14 +67,91 @@ void MQTTManager::enqueueSendMQTTQueue(const char *payload, int payload_len)
     memcpy(msg.payload, payload, p_len);
     msg.payload_len = p_len;
     // For binary data, we omit null termination unless required.
-    // msg.payload[p_len] = '\0';
+    msg.payload[p_len] = '\0';
 
     // Enqueue to the send queue (NOT the received queue).
     if (xQueueSend(sendMQTTMessageQueue, &msg, 0) != pdTRUE)
     {
         Serial.println("Failed to queue MQTT send message");
     }
-    Serial.println("Sent message over MQTT");
+}
+
+void MQTTManager::publishUpdateRoute(uint32_t destination, uint32_t nextHop, uint8_t hopCount)
+{
+    if (connected)
+    {
+        // Allocate a JSON document (adjust size as needed)
+        JsonDocument doc;
+        doc["action"] = ACTION_UPDATE_ROUTE;
+        doc["destination"] = destination;
+        doc["next_hop"] = nextHop;
+        doc["hop_count"] = hopCount;
+
+        // Serialize JSON to a buffer (or directly to a String)
+        char jsonBuffer[255];
+        size_t n = serializeJson(doc, jsonBuffer);
+
+        // Manually set the null terminator (if there is room).
+        // if (n < sizeof(jsonBuffer))
+        //     jsonBuffer[n] = '\0';
+        // else
+        //     jsonBuffer[sizeof(jsonBuffer) - 1] = '\0';
+
+        Serial.print("[MQTTManager] Raw bytes: ");
+        for (size_t i = 0; i < n; i++)
+        {
+            Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
+        }
+        Serial.println();
+
+        Serial.println("[MQTTManager] Queued update route");
+        enqueueSendMQTTQueue(jsonBuffer, n);
+    }
+}
+
+void MQTTManager::publishInvalidateRoute(uint32_t destination)
+{
+    if (connected)
+    {
+        // Allocate a JSON document (adjust size as needed)
+        JsonDocument doc;
+        doc["action"] = ACTION_INVALIDATE_ROUTE;
+        doc["destination"] = destination;
+
+        // Serialize JSON to a buffer (or directly to a String)
+        char jsonBuffer[256];
+        size_t n = serializeJson(doc, jsonBuffer);
+        Serial.println("[MQTTManager] Queued invalidate route");
+        enqueueSendMQTTQueue(jsonBuffer, n);
+    }
+}
+
+void MQTTManager::publishPacket(uint32_t packetID, const uint8_t *buffer, size_t length)
+{
+    if (connected)
+    {
+        JsonDocument doc;
+        doc["action"] = ACTION_MESSAGE;
+        doc["packet_id"] = packetID;
+
+        // Using MsgPackBinary to wrap our binary payload.
+        // Alternative would be use base64 encoding
+        doc["payload"] = MsgPackBinary(buffer, length);
+        doc["payload_len"] = length;
+
+        char jsonBuffer[512];
+        size_t n = serializeMsgPack(doc, jsonBuffer);
+        Serial.println("[MQTTManager] Queued packet");
+
+        Serial.print("[MQTTManager] Raw bytes: ");
+        for (size_t i = 0; i < n; i++)
+        {
+            Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
+        }
+        Serial.println();
+
+        enqueueSendMQTTQueue(jsonBuffer, n);
+    }
 }
 
 // Static event handler called on MQTT events.
@@ -123,12 +200,12 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
         // Copy topic ensuring buffer is not overrun.
         int t_len = (event->topic_len < MQTT_TOPIC_MAX_LEN - 1) ? event->topic_len : MQTT_TOPIC_MAX_LEN - 1;
         memcpy(msg.topic, event->topic, t_len);
-        msg.topic[t_len] = '\0';
+        // msg.topic[t_len] = '\0'; // not required for binary data
 
         // Copy payload ensuring buffer is not overrun.
         int p_len = (event->data_len < MQTT_PAYLOAD_MAX_LEN - 1) ? event->data_len : MQTT_PAYLOAD_MAX_LEN - 1;
         memcpy(msg.payload, event->data, p_len);
-        msg.payload[p_len] = '\0';
+        // msg.payload[p_len] = '\0'; // not required for binary data
         msg.payload_len = p_len;
         for (int i = 0; i < p_len; i++)
         {
@@ -176,7 +253,7 @@ void MQTTManager::sendMQTTQueueTask(void *pvParameters)
     {
         if (xQueueReceive(mgr->sendMQTTMessageQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
-            mgr->publishMessage(mgr->sendTopic, msg.payload);
+            mgr->publishMessage(mgr->sendTopic, msg.payload, msg.payload_len);
         }
     }
 }
