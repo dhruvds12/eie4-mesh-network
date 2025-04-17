@@ -67,10 +67,17 @@ public:
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
 private:
+    SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
     TaskHandle_t _routerTaskHandler;
     MQTTManager *_mqttManager;
+
+    struct Lock {
+        SemaphoreHandle_t m;
+        explicit Lock(SemaphoreHandle_t m):m(m){ xSemaphoreTakeRecursive(m, portMAX_DELAY);}
+        ~Lock(){ xSemaphoreGiveRecursive(m);}
+    };
 
     // TODO: MUTEX!!!!! - multiple tasks access this and could modify it!!
     // routeTable[dest] = RouteEntry
@@ -243,6 +250,16 @@ private:
     void storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t length, uint32_t expectedNextHop);
 
     bool findAckPacket(uint32_t packetID);
+
+    void insertDataBuffer(uint32_t destNodeID, uint8_t *data, size_t len);
+
+    bool ackBufferHasPacketID(uint32_t packetID);
+
+    void removeFromACKBuffer(uint32_t packetID);
+
+    bool tryImplicitAck(uint32_t packetID);
+
+    void removeItemRoutingTable(uint32_t ID);
 
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);

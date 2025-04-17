@@ -35,7 +35,6 @@ uint32_t getNodeID()
   return (uint32_t)(mac & 0xFFFFFFFF);
 }
 
-// --- Other existing declarations ---
 DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);

@@ -23,9 +23,6 @@ public:
     // Enqueue a message for transmission.
     bool enqueueMessage(uint32_t destNodeID, const char* message);
 
-    // Optionally, you can add methods to register with the MessageResultStore
-    // if you want to tag outgoing messages with an ID, for instance.
-
 private:
     IRouter* _router;                  // Dependency-injected router instance
     QueueHandle_t _sendQueue;            // FreeRTOS queue for outgoing messages

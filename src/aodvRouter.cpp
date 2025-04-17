@@ -18,6 +18,8 @@ bool AODVRouter::begin()
     sendBroadcastInfo();
     return true;
 #else
+    _mutex = xSemaphoreCreateRecursiveMutex();
+    configASSERT(_mutex);
     BaseType_t taskCreated = xTaskCreate(
         routerTask,
         "AODVRouterTask",
@@ -126,6 +128,7 @@ void AODVRouter::sendBroadcastInfo()
 
 void AODVRouter::cleanupAckBuffer()
 {
+    Lock l(_mutex);
     TickType_t now = xTaskGetTickCount();
     // Create a temporary list of packetIDs to remove.
     std::vector<uint32_t> expiredPackets;
@@ -198,7 +201,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
         if (copy)
         {
             memcpy(copy, data, len);
-            _dataBuffer[destNodeID].push_back({copy, len});
+            insertDataBuffer(destNodeID, copy, len);
         }
         else
         {
@@ -238,21 +241,8 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     BaseHeader bh;
     deserialiseBaseHeader(rxPacket->data, bh);
 
-    auto it = ackBuffer.find(bh.packetID);
-    if (it != ackBuffer.end())
-    {
-        // TODO:  verify that the packet came from the expected next hop:
-        // if (bh.srcNodeID == it->second.expectedNextHop)
-        // {
-        //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
-        //     ackBuffer.erase(it);
-        //     return;
-        // }
-
-        Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
-        ackBuffer.erase(it);
+    if (tryImplicitAck(bh.packetID))
         return;
-    }
 
     if (isDuplicatePacketID(bh.packetID))
     {
@@ -442,7 +432,9 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
     else
     {
         // TODO: crude implementation for now we just remove the route to the original DestinationNode
-        _routeTable.erase(rerr.originalDestNodeID);
+        removeItemRoutingTable(rerr.originalDestNodeID);
+        if (_mqttManager->connected)
+            _mqttManager->publishInvalidateRoute(rerr.originalDestNodeID);
     }
 
     if (_myNodeID == rerr.senderNodeID)
@@ -623,6 +615,7 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
 // DATA BUFFER HELPER FUNCTIONS
 void AODVRouter::flushDataQueue(uint32_t destNodeID)
 {
+    Lock l(_mutex);
     auto it = _dataBuffer.find(destNodeID);
     if (it != _dataBuffer.end())
     {
@@ -711,6 +704,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
 
 void AODVRouter::updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hopCount)
 {
+    Lock l(_mutex);
     auto it = _routeTable.find(destination);
     if (it == _routeTable.end())
     {
@@ -743,16 +737,21 @@ void AODVRouter::updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hop
 
 bool AODVRouter::hasRoute(uint32_t destination)
 {
+    Lock l(_mutex);
     return (_routeTable.find(destination) != _routeTable.end());
 }
 
 RouteEntry AODVRouter::getRoute(uint32_t destination)
 {
+    Lock l(_mutex);
+    // TODO: logic flaw -> assumes destination is present otherwise go based the map not ideal.
     return _routeTable[destination];
 }
 
 void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t senderNodeID)
 {
+    // TODO: holds the mutex for a long time is there a more efficient way to do this?
+    Lock l(_mutex);
     // remove any routes to the broken node
     _routeTable.erase(brokenNodeID);
     if (_mqttManager != nullptr && _mqttManager->connected)
@@ -797,6 +796,7 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
 
 bool AODVRouter::isDuplicatePacketID(uint32_t packetID)
 {
+    Lock l(_mutex);
     if (receivedPacketIDs.find(packetID) != receivedPacketIDs.end())
     {
         return true;
@@ -806,12 +806,14 @@ bool AODVRouter::isDuplicatePacketID(uint32_t packetID)
 
 void AODVRouter::storePacketID(uint32_t packetID)
 {
+    Lock l(_mutex);
     receivedPacketIDs.insert(packetID);
 }
 
 bool AODVRouter::isNodeIDKnown(uint32_t packetID)
 {
-    if (discoveredNodes.find(packetID) != receivedPacketIDs.end())
+    Lock l(_mutex);
+    if (discoveredNodes.find(packetID) != discoveredNodes.end())
     {
         return true;
     }
@@ -820,11 +822,13 @@ bool AODVRouter::isNodeIDKnown(uint32_t packetID)
 
 void AODVRouter::saveNodeID(uint32_t packetID)
 {
+    Lock l(_mutex);
     discoveredNodes.insert(packetID);
 }
 
 void AODVRouter::storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t length, uint32_t expectedNextHop)
 {
+    Lock l(_mutex);
     // Allocate memory for a copy of the packet.
     uint8_t *packetCopy = (uint8_t *)pvPortMalloc(length);
     if (packetCopy == nullptr)
@@ -844,9 +848,65 @@ void AODVRouter::storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t
 
 bool AODVRouter::findAckPacket(uint32_t packetID)
 {
+    Lock l(_mutex);
     if (ackBuffer.find(packetID) != ackBuffer.end())
     {
         return true;
     }
     return false;
+}
+
+void AODVRouter::insertDataBuffer(uint32_t destNodeID, uint8_t *data, size_t len)
+{
+    Lock l(_mutex);
+    _dataBuffer[destNodeID].push_back({data, len});
+}
+
+bool AODVRouter::ackBufferHasPacketID(uint32_t packetID)
+{
+    Lock l(_mutex);
+    if (ackBuffer.find(packetID) != ackBuffer.end())
+    {
+        return true;
+    }
+    return false;
+}
+
+void AODVRouter::removeFromACKBuffer(uint32_t packetID)
+{
+    Lock l(_mutex);
+    auto it = ackBuffer.find(packetID);
+    if (it != ackBuffer.end())
+    {
+        // TODO:  verify that the packet came from the expected next hop:
+        // if (bh.srcNodeID == it->second.expectedNextHop)
+        // {
+        //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
+        //     ackBuffer.erase(it);
+        //     return;
+        // }
+
+        Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", packetID);
+        vPortFree(it->second.packet);
+        ackBuffer.erase(it);
+        return;
+    }
+}
+
+bool AODVRouter::tryImplicitAck(uint32_t packetID)
+{
+    Lock l(_mutex);
+    auto it = ackBuffer.find(packetID);
+    if (it == ackBuffer.end())
+        return false;
+    vPortFree(it->second.packet);
+    ackBuffer.erase(it);
+    Serial.printf("[AODVRouter] Implicit ACK for %u\n", packetID);
+    return true;
+}
+
+void AODVRouter::removeItemRoutingTable(uint32_t id)
+{
+    Lock l(_mutex);
+    _routeTable.erase(id);
 }
