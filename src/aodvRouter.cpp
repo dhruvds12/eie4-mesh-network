@@ -300,6 +300,9 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     case PKT_BROADCAST_INFO:
         handleBroadcastInfo(bh, payload, payloadLen);
         break;
+    case PKT_ACK:
+        Serial.println("Received ACK");
+        break;
     default:
         Serial.printf("[AODVRouter] Unknown packet type :( %u\n", bh.packetType);
         break;
