@@ -1,6 +1,7 @@
 #ifndef AODVROUTER_H
 #define AODVROUTER_H
 
+#include "IRouter.h"
 #include "IRadioManager.h"
 #include "packet.h"
 #include <map>
@@ -32,7 +33,7 @@ struct ackBufferEntry
     TickType_t timestamp;     // time when the packet was sent
 };
 
-class AODVRouter
+class AODVRouter : public IRouter
 {
 
 public:
@@ -42,7 +43,7 @@ public:
      * @param RadioManager
      * @param myNodeID
      */
-    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager,uint32_t myNodeID);
+    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager, uint32_t myNodeID);
 
     /**
      * @brief Initialise and create the router task
@@ -71,6 +72,7 @@ private:
     TaskHandle_t _routerTaskHandler;
     MQTTManager *_mqttManager;
 
+    // TODO: MUTEX!!!!! - multiple tasks access this and could modify it!!
     // routeTable[dest] = RouteEntry
     std::map<uint32_t, RouteEntry> _routeTable;
 
@@ -92,7 +94,7 @@ private:
     // store messages that are waiting on ack
     std::map<uint32_t, ackBufferEntry> ackBuffer;
 
-    static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000); // 10 minutes
+    static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000);       // 10 minutes
     static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
 
     /**
@@ -112,7 +114,7 @@ private:
     void sendBroadcastInfo();
 
     void cleanupAckBuffer();
-    
+
     static void ackCleanupCallback(TimerHandle_t xTimer);
 
     // TOP LEVEL RX PACKET HANDLERS

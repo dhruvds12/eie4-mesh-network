@@ -1,16 +1,6 @@
 #include "AODVRouter.h"
 #include <Arduino.h>
 
-static const uint8_t PKT_BROADCAST_INFO = 0x00;
-static const uint8_t PKT_BROADCAST = 0x01;
-static const uint8_t PKT_RREQ = 0x02;
-static const uint8_t PKT_RREP = 0x03;
-static const uint8_t PKT_RERR = 0x04;
-static const uint8_t PKT_ACK = 0x05;
-static const uint8_t PKT_DATA = 0x06;
-
-static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
-
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
 AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID)
@@ -352,6 +342,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
         sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
         return;
     }
+    Serial.println("[AODVRouter] Forwading RREQ");
 
     RREQHeader forwardRreq = rreq;
     // forwardRreq.currentHops++; // TODO: Not sure this is required as we have hop count already in base header
@@ -389,6 +380,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 
     if (hasRoute(rrep.RREPDestNodeID))
     {
+        Serial.printf("Flushing data queue for ID: %d", rrep.RREPDestNodeID);
         flushDataQueue(rrep.RREPDestNodeID);
     }
 
@@ -405,6 +397,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
+    Serial.println("[AODVRouter] Forwading RREP");
     RouteEntry re = getRoute(rrep.originNodeID);
     RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
     newRrep.numHops++;         // increment number of hops
@@ -462,7 +455,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
         Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
     }
-
+    Serial.println("[AODVRouter] Forwading RERR");
     // forward the rerr to the original sender as there is a route
     RouteEntry re = getRoute(rerr.senderNodeID);
 
@@ -508,7 +501,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
         return;
     }
-
+    Serial.println("[AODVRouter] Forwading Data");
     RouteEntry re = getRoute(dataHeader.finalDestID);
 
     BaseHeader fwd = base;
@@ -545,7 +538,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
 
     // update route to the originNode
     updateRoute(bih.originNodeID, base.srcNodeID, base.hopCount + 1);
-
+    Serial.println("[AODVRouter] Forwading BroadcastINFO");
     // increment number of hops
     BaseHeader fwd = base;
     fwd.srcNodeID = _myNodeID; // replace your node id and store the originNodeID in the bih header
@@ -577,8 +570,8 @@ void AODVRouter::sendRREQ(uint32_t destNodeID)
     bh.reserved = 0;
 
     RREQHeader rreq;
-    rreq.originNodeID = _myNodeID;
-    rreq.RREQDestNodeID = destNodeID;
+    rreq.originNodeID = _myNodeID;    // Person who request the route request
+    rreq.RREQDestNodeID = destNodeID; // ID of node route required for
 
     transmitPacket(bh, (uint8_t *)&rreq, sizeof(RREQHeader));
 }

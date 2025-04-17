@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "IRadioManager.h"
 #include <ArduinoJson.h>
+#include "NetworkMessageHandler.h"
 
 extern "C"
 {
@@ -33,7 +34,7 @@ class MQTTManager
 {
 public:
     // Constructor
-    MQTTManager(const char *brokerURI, const char *subscribeTopic, IRadioManager *RadioManager);
+    MQTTManager(const char *brokerURI, uint32_t nodeId, IRadioManager *radioManager, NetworkMessageHandler *networkMessageHandler);
 
     // Begin
     void begin();
@@ -52,9 +53,12 @@ public:
 
 private:
     const char *brokerURI;
-    const char *subscribeTopic;
-    char sendTopic[64];
+    uint32_t nodeId;
+    char commandTopic[MQTT_TOPIC_MAX_LEN];
+    char processTopic[MQTT_TOPIC_MAX_LEN];
+    char sendMessageTopic[MQTT_TOPIC_MAX_LEN];
     IRadioManager *_radioManager;
+    NetworkMessageHandler *_networkHandler;
 
     esp_mqtt_client_handle_t client;
     QueueHandle_t receivedMQTTMessageQueue;
@@ -73,7 +77,7 @@ private:
     void processMessage(const mqtt_message_t &msg);
 
     // Singleton pointer to access instance variables from static functions
-    static MQTTManager *instance;
+    // static MQTTManager *instance;
 };
 
 extern MQTTManager *mqttManager;

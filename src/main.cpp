@@ -12,6 +12,7 @@
 #include "wifiConfig.h"
 #include "wifiManager.h"
 #include "mqttManager.h"
+#include "NetworkMessageHandler.h"
 
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
@@ -40,6 +41,7 @@ SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 MQTTManager *mqttManager = nullptr;
 AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID());
+NetworkMessageHandler networkMessageHandler(&aodvRouter);
 
 void VextON(void)
 {
@@ -77,11 +79,8 @@ void setup()
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
 
-  char subscribeTopic[64];
-  sprintf(subscribeTopic, "physical/node%d/status", getNodeID());
-
   // Create the MQTTManager instance with the dynamically built subscribe topic.
-  mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", subscribeTopic, &radioManager);
+  mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", getNodeID(), &radioManager, &networkMessageHandler);
 
   // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
   if (!wifiConnected)

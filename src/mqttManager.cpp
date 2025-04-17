@@ -1,17 +1,14 @@
 #include "mqttManager.h"
-#include <string.h>
+#include <cstdio>
 
 // TODO: Using old version of the ESP-IDF library do not have MQTT v5
 // WIP - likely will need to clone esp-idf v5.1 and add arduino as a component to maintain functionality
 
 extern uint32_t getNodeID();
 
-// Initialise static instance pointer to NULL.
-MQTTManager *MQTTManager::instance = nullptr;
-
 // Constructor: store configuration and create a FreeRTOS queue.
-MQTTManager::MQTTManager(const char *brokerURI, const char *subscribeTopic, IRadioManager *radioManager)
-    : brokerURI(brokerURI), subscribeTopic(subscribeTopic), client(nullptr), _radioManager(radioManager)
+MQTTManager::MQTTManager(const char *brokerURI, uint32_t nodeId, IRadioManager *radioManager, NetworkMessageHandler *networkMessageHandler)
+    : brokerURI(brokerURI), nodeId(nodeId), _radioManager(radioManager), _networkHandler(networkMessageHandler), client(nullptr)
 {
     // Create a queue capable of holding 10 messages.
     receivedMQTTMessageQueue = xQueueCreate(10, sizeof(mqtt_message_t));
@@ -26,24 +23,29 @@ MQTTManager::MQTTManager(const char *brokerURI, const char *subscribeTopic, IRad
         Serial.println("Failed to create send MQTT message queue");
     }
     // Save the singleton instance pointer.
-    instance = this;
 }
 
 // Begin: initialise and start the MQTT client and create the task for processing messages.
 void MQTTManager::begin()
 {
-    // Configure the MQTT client using the provided broker URI and enable MQTT v5.
+    // create the mqtt topics
+    snprintf(commandTopic, sizeof(commandTopic), "physical/node%u/command", nodeId);
+    snprintf(processTopic, sizeof(processTopic), "physical/node%u/process_message", nodeId);
+    snprintf(sendMessageTopic, sizeof(sendMessageTopic), "physical/node%u/send_message", nodeId);
+
+    // Configure the MQTT client using the provided broker URI and enable MQTT v5 -> using an old version of mqtt as old version of espidf
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.uri = brokerURI;
+    mqtt_cfg.user_context = this;
     mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
 
     client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, MQTTManager::mqttEventHandler, client);
+    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, MQTTManager::mqttEventHandler, this);
     esp_mqtt_client_start(client);
 
     // Create a FreeRTOS task to process incoming MQTT messages.
     xTaskCreate(MQTTManager::receivedMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 3, NULL);
-    xTaskCreate(MQTTManager::sendMQTTQueueTask, "ReceiveMQTTQueueTask", 4096, this, 2, NULL);
+    xTaskCreate(MQTTManager::sendMQTTQueueTask, "SendMQTTQueueTask", 4096, this, 2, NULL);
 
     Serial.println("MQTT Manager started.");
 }
@@ -97,14 +99,14 @@ void MQTTManager::publishUpdateRoute(uint32_t destination, uint32_t nextHop, uin
         // else
         //     jsonBuffer[sizeof(jsonBuffer) - 1] = '\0';
 
-        Serial.print("[MQTTManager] Raw bytes: ");
-        for (size_t i = 0; i < n; i++)
-        {
-            Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
-        }
-        Serial.println();
+        // Serial.print("[MQTTManager] Raw bytes: ");
+        // for (size_t i = 0; i < n; i++)
+        // {
+        //     Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
+        // }
+        // Serial.println();
 
-        Serial.println("[MQTTManager] Queued update route");
+        // Serial.println("[MQTTManager] Queued update route");
         enqueueSendMQTTQueue(jsonBuffer, n);
     }
 }
@@ -141,14 +143,14 @@ void MQTTManager::publishPacket(uint32_t packetID, const uint8_t *buffer, size_t
 
         char jsonBuffer[512];
         size_t n = serializeMsgPack(doc, jsonBuffer);
-        Serial.println("[MQTTManager] Queued packet");
+        // Serial.println("[MQTTManager] Queued packet");
 
-        Serial.print("[MQTTManager] Raw bytes: ");
-        for (size_t i = 0; i < n; i++)
-        {
-            Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
-        }
-        Serial.println();
+        // Serial.print("[MQTTManager] Raw bytes: ");
+        // for (size_t i = 0; i < n; i++)
+        // {
+        //     Serial.printf("%02x ", (unsigned char)jsonBuffer[i]);
+        // }
+        // Serial.println();
 
         enqueueSendMQTTQueue(jsonBuffer, n);
     }
@@ -160,34 +162,32 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
 {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     // Retrieve the instance pointer.
-    MQTTManager *mgr = MQTTManager::instance;
+    auto mgr = static_cast<MQTTManager *>(handler_args);
 
     switch ((esp_mqtt_event_id_t)event_id)
     {
     case MQTT_EVENT_CONNECTED:
         Serial.println("MQTT_EVENT_CONNECTED");
         mgr->connected = true;
-        // Subscribe to the configured subscription topic.
-        esp_mqtt_client_subscribe(mgr->client, mgr->subscribeTopic, 0);
-        snprintf(mgr->sendTopic, sizeof(mgr->sendTopic), "physical/node%d/command", getNodeID());
+        esp_mqtt_client_subscribe(mgr->client, mgr->processTopic, 0);
+        esp_mqtt_client_subscribe(mgr->client, mgr->sendMessageTopic, 0);
         // Build the registration message.
         // Format: {"node_id": "node123", "command_topic": "physical/node123/command",
         //          "status_topic": "physical/node123/status", "event": "register", "lat": 1000, "long": 1000}
         {
-            char reg_msg[256];
-            uint32_t nodeId = getNodeID();
-            // Here we use sprintf to embed the nodeID into the registration JSON.
-            sprintf(reg_msg,
-                    "{\"node_id\": %u, "
-                    "\"command_topic\": \"physical/node%u/command\", "
-                    "\"status_topic\": \"physical/node%u/status\", "
-                    "\"event\": \"register\", "
-                    "\"lat\": 1000, \"long\": 1000}",
-                    nodeId, nodeId, nodeId);
+            JsonDocument doc;
+            doc["node_id"] = mgr->nodeId;
+            doc["command_topic"] = mgr->commandTopic;
+            doc["process_topic"] = mgr->processTopic;
+            doc["send_topic"] = mgr->sendMessageTopic;
+            doc["event"] = "register";
+            doc["lat"] = 1000;
+            doc["long"] = 1000;
 
-            // Publish the registration message to the registration topic.
-            esp_mqtt_client_publish(mgr->client, REGISTRATION_TOPIC, reg_msg, 0, 0, 0);
-            Serial.printf("Published registration message: %s\n", reg_msg);
+            char regMsg[256];
+            size_t rn = serializeJson(doc, regMsg);
+            esp_mqtt_client_publish(mgr->client, REGISTRATION_TOPIC, regMsg, rn, 0, 0);
+            Serial.printf("Published registration message: %s\n", regMsg);
         }
         break;
 
@@ -200,12 +200,12 @@ void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
         // Copy topic ensuring buffer is not overrun.
         int t_len = (event->topic_len < MQTT_TOPIC_MAX_LEN - 1) ? event->topic_len : MQTT_TOPIC_MAX_LEN - 1;
         memcpy(msg.topic, event->topic, t_len);
-        // msg.topic[t_len] = '\0'; // not required for binary data
+        msg.topic[t_len] = '\0'; // not required for binary data
 
         // Copy payload ensuring buffer is not overrun.
         int p_len = (event->data_len < MQTT_PAYLOAD_MAX_LEN - 1) ? event->data_len : MQTT_PAYLOAD_MAX_LEN - 1;
         memcpy(msg.payload, event->data, p_len);
-        // msg.payload[p_len] = '\0'; // not required for binary data
+        msg.payload[p_len] = '\0'; // not required for binary data
         msg.payload_len = p_len;
         for (int i = 0; i < p_len; i++)
         {
@@ -253,7 +253,7 @@ void MQTTManager::sendMQTTQueueTask(void *pvParameters)
     {
         if (xQueueReceive(mgr->sendMQTTMessageQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
-            mgr->publishMessage(mgr->sendTopic, msg.payload, msg.payload_len);
+            mgr->publishMessage(mgr->commandTopic, msg.payload, msg.payload_len);
         }
     }
 }
@@ -261,14 +261,30 @@ void MQTTManager::sendMQTTQueueTask(void *pvParameters)
 // Process an individual MQTT message. Add your custom logic here.
 void MQTTManager::processMessage(const mqtt_message_t &msg)
 {
-    Serial.printf("Processing MQTT message:\n  Topic: %s\n  Payload: %s\n", msg.topic, msg.payload);
-    bool success = _radioManager->enqueueRxPacket((const uint8_t *)msg.payload, msg.payload_len);
-    if (success)
+    if (strncmp(msg.topic, processTopic, strlen(processTopic)) == 0)
     {
-        Serial.println("Enqueued RX packet successfully!");
+        Serial.printf("Processing via radioManager: topic=%s\n", msg.topic);
+        bool ok = _radioManager->enqueueRxPacket((const uint8_t *)msg.payload, msg.payload_len);
+        Serial.println(ok ? "Enqueued RX packet" : "Failed to enqueue RX packet");
+    }
+    else if (strncmp(msg.topic, sendMessageTopic, strlen(sendMessageTopic)) == 0)
+    {
+        JsonDocument doc;
+        auto err = deserializeJson(doc, msg.payload, msg.payload_len);
+        if (err)
+        {
+            Serial.printf("Failed to parse send_message JSON: %s\n", err.c_str());
+            return;
+        }
+        uint32_t dest = doc["destination"];
+        const char *mt = doc["message"];
+        if (!_networkHandler->enqueueMessage(dest, mt))
+        {
+            Serial.println("Failed to enqueue network message");
+        }
     }
     else
     {
-        Serial.println("Failed to enqueue RX packet!");
+        Serial.printf("Unknown topic: %s\n", msg.topic);
     }
 }
