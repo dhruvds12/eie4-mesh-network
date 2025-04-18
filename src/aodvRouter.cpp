@@ -655,7 +655,8 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
             // Free the memory after transmitting.
             vPortFree(pending.data);
         }
-        else {
+        else
+        {
             // Need to deallocate data in pending AND add back to the data buffer
             insertDataBuffer(destNodeID, pending.data, pending.length);
         }
@@ -719,7 +720,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
                 // Store a copy of the packet along with its metadata.
                 storeAckPacket(header.packetID, buffer, offset, re.nextHop);
             }
-            // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken 
+            // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken
             // node BUT too late to stop transmission -> potentially should warn user about a possible failure (NOT REQUIRED FEATURE)
         }
     }
@@ -778,32 +779,30 @@ bool AODVRouter::getRoute(uint32_t destination, RouteEntry &routeEntry)
 
 void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t senderNodeID)
 {
-    // TODO: holds the mutex for a long time is there a more efficient way to do this?
-    Lock l(_mutex);
-    // remove any routes to the broken node
-    _routeTable.erase(brokenNodeID);
-    if (_mqttManager != nullptr && _mqttManager->connected)
-    {
-        // send the key that needs to be removed from simulation
-        _mqttManager->publishInvalidateRoute(brokenNodeID);
-    }
+    std::set<uint32_t> invalidRoute;
+    invalidRoute.insert(brokenNodeID);
+    invalidRoute.insert(finalDestNodeID);
 
-    // Remove any routes that have the brokenNode as the nextHop
-    for (auto it = _routeTable.begin(); it != _routeTable.end();)
     {
-        if (it->second.nextHop == brokenNodeID)
+        Lock l(_mutex);
+        // remove any routes to the broken node
+        _routeTable.erase(brokenNodeID);
+        // Decided to remove route to destination node
+        _routeTable.erase(finalDestNodeID);
+        // Remove any routes that have the brokenNode as the nextHop
+        for (auto it = _routeTable.begin(); it != _routeTable.end();)
         {
-            it = _routeTable.erase(it);
-            if (_mqttManager != nullptr && _mqttManager->connected)
+            if (it->second.nextHop == brokenNodeID)
             {
-                // send the key that needs to be removed from simulation
-                _mqttManager->publishInvalidateRoute(it->first);
+                invalidRoute.insert(it->first);
+                it = _routeTable.erase(it);
             }
-        }
-        else
-        {
-            ++it;
-        }
+            else
+            {
+                ++it;
+            }
+        }   
+
     }
 
     // TODO: IMPORTANT need to actually remove route to finalDestination
@@ -811,12 +810,12 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
     // we have to make some assumptions about the current routes that everyone has stored
     // Need to assume that everyones routeTable is unchanged.
 
-    // Decided to remove route to destination node
-    _routeTable.erase(finalDestNodeID);
     if (_mqttManager != nullptr && _mqttManager->connected)
     {
-        // send the key that needs to be removed from simulation
-        _mqttManager->publishInvalidateRoute(finalDestNodeID);
+        for (uint32_t dest : invalidRoute)
+        {
+            _mqttManager->publishInvalidateRoute(dest);
+        }
     }
 
     // TODO: Insimulation also remove destination if it goes through the sender (omitted in this case)

@@ -9,6 +9,7 @@
 #include <FreeRTOS.h>
 #include <unordered_set>
 #include "mqttmanager.h"
+#include <set>
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
