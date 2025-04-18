@@ -35,6 +35,15 @@ bool AODVRouter::begin()
 
     sendBroadcastInfo();
 
+    // Create the timer‐worker task
+    xTaskCreate(
+        timerWorkerTask,
+        "TimerWorker",
+        4096,
+        this,
+        3,
+        &_timerWorkerHandle);
+
     /*
 
     Create a software timer to send the broadcast every hour.
@@ -101,6 +110,28 @@ void AODVRouter::routerTask(void *pvParameters)
             router->handlePacket(packet);
             vPortFree(packet);
         }
+    }
+}
+
+// worker task simply waits for notifications and dispatches
+void AODVRouter::timerWorkerTask(void *pv)
+{
+    AODVRouter *self = static_cast<AODVRouter *>(pv);
+    uint32_t bits;
+    for (;;)
+    {
+        // Block until either bit is set
+        xTaskNotifyWait(
+            0,           // clear on entry
+            0xFFFFFFFFu, // clear on exit
+            &bits,
+            portMAX_DELAY);
+
+        if (bits & BROADCAST_NOTIFY_BIT)
+            self->sendBroadcastInfo();
+
+        if (bits & CLEANUP_NOTIFY_BIT)
+            self->cleanupAckBuffer();
     }
 }
 #endif
@@ -186,15 +217,28 @@ void AODVRouter::cleanupAckBuffer()
 #ifndef UNIT_TEST
 void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
 {
-    AODVRouter *router = (AODVRouter *)pvTimerGetTimerID(xTimer);
-    router->sendBroadcastInfo();
+    AODVRouter *self = (AODVRouter*)pvTimerGetTimerID(xTimer);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(
+        self->_timerWorkerHandle,
+        BROADCAST_NOTIFY_BIT,
+        eSetBits,
+        &xHigherPriorityTaskWoken
+    );
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-// The timer callback for ack cleanup.
 void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 {
-    AODVRouter *router = reinterpret_cast<AODVRouter *>(pvTimerGetTimerID(xTimer));
-    router->cleanupAckBuffer();
+    AODVRouter *self = (AODVRouter*)pvTimerGetTimerID(xTimer);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTaskNotifyFromISR(
+        self->_timerWorkerHandle,
+        CLEANUP_NOTIFY_BIT,
+        eSetBits,
+        &xHigherPriorityTaskWoken
+    );
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 #endif
 
@@ -801,8 +845,7 @@ void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID
             {
                 ++it;
             }
-        }   
-
+        }
     }
 
     // TODO: IMPORTANT need to actually remove route to finalDestination
@@ -937,3 +980,30 @@ void AODVRouter::removeItemRoutingTable(uint32_t id)
     Lock l(_mutex);
     _routeTable.erase(id);
 }
+
+
+/*
+
+Notes:
+
+USER TO USER MESSAGING:
+- Each node needs to store the user ids of users that have connected to them 
+- The then share this list with other nodes at a given period of time
+
+- When nodes join the network they should request information from neighbouring nodes about
+    the nodes and users on the network. New nodes are only active when they have this information
+    ie they should not send any other messages on the network
+
+- When a user moves from one node to another then the original node needs to be notified this will trigger
+    - a reroute of data sent to the original home node of the user
+    - a broadcast that will inform other nodes of this change
+
+
+STORING MESSAGES:
+
+- IF the home node of the user is know message is routed to the home node and stored there
+
+- IF home node of the user is unknown then message is stored locally on sender node until the 
+    home node of the dest user is found
+
+*/

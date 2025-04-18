@@ -34,6 +34,9 @@ struct ackBufferEntry
     TickType_t timestamp;     // time when the packet was sent
 };
 
+static const uint32_t BROADCAST_NOTIFY_BIT = (1u << 0);
+static const uint32_t CLEANUP_NOTIFY_BIT = (1u << 1);
+
 class AODVRouter : public IRouter
 {
 
@@ -71,13 +74,17 @@ private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
+
     TaskHandle_t _routerTaskHandler;
+    TaskHandle_t _timerWorkerHandle;
+
     MQTTManager *_mqttManager;
 
-    struct Lock {
+    struct Lock
+    {
         SemaphoreHandle_t m;
-        explicit Lock(SemaphoreHandle_t m):m(m){ xSemaphoreTakeRecursive(m, portMAX_DELAY);}
-        ~Lock(){ xSemaphoreGiveRecursive(m);}
+        explicit Lock(SemaphoreHandle_t m) : m(m) { xSemaphoreTakeRecursive(m, portMAX_DELAY); }
+        ~Lock() { xSemaphoreGiveRecursive(m); }
     };
 
     // TODO: MUTEX!!!!! - multiple tasks access this and could modify it!!
@@ -111,6 +118,8 @@ private:
      * @param pvParameters
      */
     static void routerTask(void *pvParameters);
+
+    static void timerWorkerTask(void *pvParameters);
 
     /**
      * @brief Timer callback to send broadcast info
