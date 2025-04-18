@@ -128,25 +128,35 @@ void AODVRouter::sendBroadcastInfo()
 
 void AODVRouter::cleanupAckBuffer()
 {
-    Lock l(_mutex);
-    TickType_t now = xTaskGetTickCount();
-    // Create a temporary list of packetIDs to remove.
-    std::vector<uint32_t> expiredPackets;
-
-    for (const auto &entry : ackBuffer)
+    struct Expired
     {
-        // If the packet has been in the buffer longer than ACK_TIMEOUT_TICKS
-        if ((now - entry.second.timestamp) >= ACK_TIMEOUT_TICKS)
+        ackBufferEntry entry;
+        uint32_t packetID;
+    };
+    // Create a temporary list of packetIDs to remove.
+    std::vector<Expired> expired;
+    {
+        Lock l(_mutex);
+        TickType_t now = xTaskGetTickCount();
+        for (auto it = ackBuffer.begin(); it != ackBuffer.end();)
         {
-            expiredPackets.push_back(entry.first);
+            if (now - it->second.timestamp >= ACK_TIMEOUT_TICKS)
+            {
+                expired.push_back({it->second, it->first});
+                it = ackBuffer.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
     }
 
     // Process all expired entries.
-    for (uint32_t packetID : expiredPackets)
+    for (auto &e : expired)
     {
         // Retrieve the stored ack entry.
-        ackBufferEntry abe = ackBuffer[packetID];
+        ackBufferEntry &abe = e.entry;
 
         // Deserialize the BaseHeader from the stored packet.
         BaseHeader baseHdr;
@@ -169,9 +179,7 @@ void AODVRouter::cleanupAckBuffer()
             memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
             sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
         }
-
-        // Remove the expired entry from ackBuffer.
-        ackBuffer.erase(packetID);
+        vPortFree(abe.packet);
     }
 }
 
@@ -192,8 +200,9 @@ void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {
+    RouteEntry re;
 
-    if (!hasRoute(destNodeID))
+    if (!getRoute(destNodeID, re))
     {
         Serial.printf("[AODVRouter] No route for %u, sending RREQ.\n", destNodeID);
 
@@ -211,8 +220,6 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
         sendRREQ(destNodeID);
         return;
     }
-
-    RouteEntry re = getRoute(destNodeID);
 
     BaseHeader bh;
     bh.destNodeID = re.nextHop;
@@ -327,9 +334,9 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
-    if (hasRoute(rreq.RREQDestNodeID))
+    RouteEntry re;
+    if (getRoute(rreq.RREQDestNodeID, re))
     {
-        RouteEntry re = getRoute(rreq.RREQDestNodeID);
         Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
         // There is a route to the node, therefore use the entry as the base number of hops
         sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
@@ -384,14 +391,14 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
-    if (!hasRoute(rrep.originNodeID))
+    RouteEntry re;
+    if (!getRoute(rrep.originNodeID, re))
     {
         Serial.println("[AODVRouter] Got RREP but no route to the origin!");
         return;
     }
 
     Serial.println("[AODVRouter] Forwading RREP");
-    RouteEntry re = getRoute(rrep.originNodeID);
     RREPHeader newRrep = rrep; // need to increment the number of hops in rrep header as per note
     newRrep.numHops++;         // increment number of hops
     // TODO: is this required already have a hopCount?????
@@ -444,16 +451,15 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
+    RouteEntry re;
     // is there a route to the original sender
-    if (!hasRoute(rerr.senderNodeID))
+    if (!getRoute(rerr.senderNodeID, re))
     {
         Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
     }
     Serial.println("[AODVRouter] Forwading RERR");
     // forward the rerr to the original sender as there is a route
-    RouteEntry re = getRoute(rerr.senderNodeID);
-
     // no change to the rerr as that remains static
 
     BaseHeader fwdBase = base;
@@ -488,7 +494,9 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
 
-    if (!hasRoute(dataHeader.finalDestID))
+    RouteEntry re;
+
+    if (!getRoute(dataHeader.finalDestID, re))
     {
         Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
         // special case where node self reports broken link therefore brokenNodeID == originNodeID
@@ -497,7 +505,6 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         return;
     }
     Serial.println("[AODVRouter] Forwading Data");
-    RouteEntry re = getRoute(dataHeader.finalDestID);
 
     BaseHeader fwd = base;
     fwd.destNodeID = re.nextHop;
@@ -615,13 +622,23 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
 // DATA BUFFER HELPER FUNCTIONS
 void AODVRouter::flushDataQueue(uint32_t destNodeID)
 {
-    Lock l(_mutex);
-    auto it = _dataBuffer.find(destNodeID);
-    if (it != _dataBuffer.end())
+
+    std::vector<dataBufferEntry> pendingList;
     {
-        for (auto &pending : it->second)
+        Lock l(_mutex);
+        auto it = _dataBuffer.find(destNodeID);
+        if (it != _dataBuffer.end())
         {
-            RouteEntry re = getRoute(destNodeID);
+            pendingList = std::move(it->second);
+            _dataBuffer.erase(it);
+        }
+    }
+
+    for (auto &pending : pendingList)
+    {
+        RouteEntry re;
+        if (getRoute(destNodeID, re))
+        {
             BaseHeader bh;
             bh.destNodeID = re.nextHop;
             bh.srcNodeID = _myNodeID;
@@ -638,7 +655,10 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
             // Free the memory after transmitting.
             vPortFree(pending.data);
         }
-        _dataBuffer.erase(it);
+        else {
+            // Need to deallocate data in pending AND add back to the data buffer
+            insertDataBuffer(destNodeID, pending.data, pending.length);
+        }
     }
 }
 
@@ -692,10 +712,15 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
         if (header.destNodeID != BROADCAST_ADDR &&
             (header.packetType == PKT_DATA || header.packetType == PKT_RREP))
         {
+            RouteEntry re;
             // Get the expected next hop from the routing table.
-            uint32_t nextHop = getRoute(header.destNodeID).nextHop;
-            // Store a copy of the packet along with its metadata.
-            storeAckPacket(header.packetID, buffer, offset, nextHop);
+            if (getRoute(header.destNodeID, re))
+            {
+                // Store a copy of the packet along with its metadata.
+                storeAckPacket(header.packetID, buffer, offset, re.nextHop);
+            }
+            // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken 
+            // node BUT too late to stop transmission -> potentially should warn user about a possible failure (NOT REQUIRED FEATURE)
         }
     }
 }
@@ -741,11 +766,14 @@ bool AODVRouter::hasRoute(uint32_t destination)
     return (_routeTable.find(destination) != _routeTable.end());
 }
 
-RouteEntry AODVRouter::getRoute(uint32_t destination)
+bool AODVRouter::getRoute(uint32_t destination, RouteEntry &routeEntry)
 {
     Lock l(_mutex);
-    // TODO: logic flaw -> assumes destination is present otherwise go based the map not ideal.
-    return _routeTable[destination];
+    auto it = _routeTable.find(destination);
+    if (it == _routeTable.end())
+        return false;
+    routeEntry = it->second;
+    return true;
 }
 
 void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t senderNodeID)

@@ -230,7 +230,7 @@ private:
     //  ROUTING TABLE HELPER FUNCTIONS
     void updateRoute(uint32_t destination, uint32_t nextHop, uint8_t hopCount);
     bool hasRoute(uint32_t destination);
-    RouteEntry getRoute(uint32_t destination);
+    bool getRoute(uint32_t destination, RouteEntry &RouteEntry);
     void invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t senderNodeID);
 
     // DATA QUEUE HELPER FUNCTIONS
