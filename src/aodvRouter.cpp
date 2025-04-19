@@ -217,27 +217,25 @@ void AODVRouter::cleanupAckBuffer()
 #ifndef UNIT_TEST
 void AODVRouter::broadcastTimerCallback(TimerHandle_t xTimer)
 {
-    AODVRouter *self = (AODVRouter*)pvTimerGetTimerID(xTimer);
+    AODVRouter *self = (AODVRouter *)pvTimerGetTimerID(xTimer);
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xTaskNotifyFromISR(
         self->_timerWorkerHandle,
         BROADCAST_NOTIFY_BIT,
         eSetBits,
-        &xHigherPriorityTaskWoken
-    );
+        &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 {
-    AODVRouter *self = (AODVRouter*)pvTimerGetTimerID(xTimer);
+    AODVRouter *self = (AODVRouter *)pvTimerGetTimerID(xTimer);
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xTaskNotifyFromISR(
         self->_timerWorkerHandle,
         CLEANUP_NOTIFY_BIT,
         eSetBits,
-        &xHigherPriorityTaskWoken
-    );
+        &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 #endif
@@ -583,7 +581,11 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     updateRoute(base.srcNodeID, base.srcNodeID, 1);
 
     // update route to the originNode
-    updateRoute(bih.originNodeID, base.srcNodeID, base.hopCount + 1);
+    if (bih.originNodeID != _myNodeID)
+    {
+
+        updateRoute(bih.originNodeID, base.srcNodeID, base.hopCount + 1);
+    }
     Serial.println("[AODVRouter] Forwading BroadcastINFO");
     // increment number of hops
     BaseHeader fwd = base;
@@ -981,13 +983,12 @@ void AODVRouter::removeItemRoutingTable(uint32_t id)
     _routeTable.erase(id);
 }
 
-
 /*
 
 Notes:
 
 USER TO USER MESSAGING:
-- Each node needs to store the user ids of users that have connected to them 
+- Each node needs to store the user ids of users that have connected to them
 - The then share this list with other nodes at a given period of time
 
 - When nodes join the network they should request information from neighbouring nodes about
@@ -1003,7 +1004,7 @@ STORING MESSAGES:
 
 - IF the home node of the user is know message is routed to the home node and stored there
 
-- IF home node of the user is unknown then message is stored locally on sender node until the 
+- IF home node of the user is unknown then message is stored locally on sender node until the
     home node of the dest user is found
 
 */
