@@ -64,7 +64,7 @@ void setup()
   VextON();
   delay(100);
 
-  Serial.printf("NODE ID: %d\n", getNodeID());
+  Serial.printf("NODE ID: %lu\n", (unsigned long)getNodeID());
 
   // Initialise display if needed
   displayManager.initialise();
