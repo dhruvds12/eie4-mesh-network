@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include "mqttmanager.h"
 #include <set>
+#include <unordered_map>
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
@@ -32,6 +33,22 @@ struct ackBufferEntry
     size_t length;
     uint32_t expectedNextHop; // the next hop node you expect to forward the packet
     TickType_t timestamp;     // time when the packet was sent
+};
+
+// per‑user cache entry
+struct GutEntry
+{
+    uint32_t nodeID;
+    uint8_t seq;
+    uint32_t ts; /* lastSeen epoch */
+};
+
+// neighbour info for Bloom check
+struct NeighInfo
+{
+    uint32_t nodeID;
+    uint8_t listVer;
+    uint8_t bloom[8];
 };
 
 static const uint32_t BROADCAST_NOTIFY_BIT = (1u << 0);
@@ -87,6 +104,8 @@ private:
         ~Lock() { xSemaphoreGiveRecursive(m); }
     };
 
+    // Data structures
+
     // TODO: MUTEX!!!!! - multiple tasks access this and could modify it!!
     // routeTable[dest] = RouteEntry
     std::map<uint32_t, RouteEntry> _routeTable;
@@ -109,8 +128,18 @@ private:
     // store messages that are waiting on ack
     std::map<uint32_t, ackBufferEntry> ackBuffer;
 
+    // Global user Table 
+    std::unordered_map<uint32_t, GutEntry> _gut;       /* userID → info */
+
+    // Neighbour bloom filter info
+    std::unordered_map<uint32_t, NeighInfo> _nbrBloom; /* nodeID → bloom */
+
+    // Timers
+
     static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000);       // 10 minutes
     static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
+
+    // Functions:
 
     /**
      * @brief Router task function
