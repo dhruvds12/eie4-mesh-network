@@ -105,7 +105,7 @@
 
 ---
 
-## 6. Recommended RAM Structures (C‑style)
+## 6. Recommended RAM Structures 
 
 ```c
 typedef struct {
@@ -150,6 +150,14 @@ Selecting a contact triggers the node to:
 1. Check local GUT; if stale, send `LOC_REQ`.  
 2. Package chat/text payload with end‑to‑end encryption.  
 3. Unicast via existing AODV node route.
+
+---
+
+## 10. Bloom Filters
+
+Bloom filters are used to reduce the number of packets sent over the air. Each node maintains a bloom filter for each of its neighbours, which is a compact representation of the users it knows about. When a node receives a `HELLO_SUMMARY` packet, it can quickly check if it needs to send a `GET_DIFF` packet by comparing the bloom filter in the `HELLO_SUMMARY` with its own bloom filter for that neighbour. If the filters differ, it means there are users that have been added or removed, and a `GET_DIFF` packet is sent to request the specific changes.
+
+The bloom filter is a probabilistic data structure that allows for efficient membership testing. It uses multiple hash functions to map user IDs to bits in a fixed-size array. When a user ID is added, the corresponding bits are set to 1. When checking for membership, if all the bits corresponding to the user ID are set to 1, it is likely that the user ID is present in the filter. However, there is a small chance of false positives, which is acceptable in this context. In this case we use the bloom filter as a hash of the userIDs and compare bloom filters to see if the hash is the same. If the hash is different, we know that there are users that have been added or removed.
 
 ---
 
