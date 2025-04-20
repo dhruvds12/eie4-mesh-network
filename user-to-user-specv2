@@ -34,6 +34,7 @@
 | `0x0C` | `PKT_STATE_SYNC_CHUNK` | Chunked state reply<br/>TTL = 1                                                    | `chunkType (1 B)`<br/>`chunkID (1 B)`<br/>`count (1 B)` + `entries…`                                                                                                             |
 | `0x0D` | `PKT_LOC_REQ`          | Find user’s nodeID on‑demand<br/>TTL = diameter                                    | `reqID (1 B)`<br/>`userID (4 B)`                                                                                                                                                  |
 | `0x0E` | `PKT_LOC_REP`          | Answer to `LOC_REQ` via reverse path<br/>TTL = route hops                          | `reqID (1 B)`<br/>`nodeID (4 B)`<br/>`seq (1 B)`                                                                                                                                   |
+|`0x0F` | `PKT_SEND_USER_MESSAGRE` | Send user message (chat)<br/>TTL = route hops                                      | `userID (4 B)`<br/>`msgID (4 B)`<br/>`msgSize (2 B)`<br/>`msgData (msgSize B)`                                                                                                     |
 
 ---
 
