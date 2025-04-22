@@ -30,6 +30,8 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
     {
         UserInfo info{userID, bleHandle, true, now};
         _users.emplace(userID, info);
+        _diffRemoved.erase(userID);
+        _diffAdded.insert(userID);
     }
     writeUnlock();
 }
@@ -38,6 +40,9 @@ void UserSessionManager::remove(uint32_t userID)
 {
     writeLock();
     _users.erase(userID);
+    _diffAdded.erase(userID);
+    _diffRemoved.insert(userID);
+
     writeUnlock();
 }
 
@@ -95,4 +100,18 @@ std::vector<UserInfo> UserSessionManager::allUsers() const
     }
     readUnlock();
     return list;
+}
+
+void UserSessionManager::getAndClearDiff(std::vector<uint32_t> &added,
+                                         std::vector<uint32_t> &removed)
+{
+    writeLock();
+    // move out current diffs
+    added.assign(_diffAdded.begin(), _diffAdded.end());
+    removed.assign(_diffRemoved.begin(), _diffRemoved.end());
+
+    // clear for next round
+    _diffAdded.clear();
+    _diffRemoved.clear();
+    writeUnlock();
 }

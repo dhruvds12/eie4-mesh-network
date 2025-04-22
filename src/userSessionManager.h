@@ -7,6 +7,7 @@
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "set"
 
 // Special value indicating no active BLE connection
 static const uint16_t INVALID_HANDLE = 0xFFFF;
@@ -47,11 +48,18 @@ public:
     // Retrieve a snapshot of all known users
     std::vector<UserInfo> allUsers() const;
 
+    /// Call this to grab everything that’s been added/removed since
+    /// the last time you called getAndClearDiff().
+    void getAndClearDiff(std::vector<uint32_t> &added, std::vector<uint32_t> &removed);
+
 private:
     // Reader-writer lock implementation
     mutable SemaphoreHandle_t _readCountMutex;
     mutable SemaphoreHandle_t _writeMutex;
     mutable int _readCount;
+
+    std::set<uint32_t> _diffAdded;
+    std::set<uint32_t> _diffRemoved;
 
     void readLock() const
     {

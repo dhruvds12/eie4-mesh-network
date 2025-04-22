@@ -85,6 +85,15 @@ struct BROADCASTINFOHeader
     uint32_t originNodeID;
 };
 
+#pragma pack(push, 1)
+struct DiffBroadcastInfoHeader
+{
+    uint32_t originNodeID; // 4 B
+    uint16_t numAdded;     // 2 B
+    uint16_t numRemoved;   // 2 B
+};
+#pragma pack(pop)
+
 struct UREQHeader
 {
     uint32_t originNodeID;
