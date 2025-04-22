@@ -18,18 +18,10 @@ enum PacketType : uint8_t
     PKT_BROADCAST = 0x05,
     PKT_BROADCAST_INFO = 0x06,
     PKT_ACK = 0x07,
-
-    PKT_HELLO_SUMMARY = 0x10,
-    PKT_GET_DIFF = 0x11,
-    PKT_DIFF_REPLY = 0x12,
-    PKT_MOVE_UPDATE = 0x13,
-    PKT_LOC_REQ = 0x14,
-    PKT_LOC_REP = 0x15,
-    PKT_STATE_SYNC_REQ = 0x16,
-    PKT_STATE_SYNC_CHUNK = 0x17,
-    PKT_NODE_ADVERT = 0x18,
-    PKT_USER_SUMMARY = 0x19,
-    PKT_USER_MOVED = 0x1A // Not sure if this will make the cut
+    PKT_UREQ = 0x0F,
+    PKT_UREP = 0x10,
+    PKT_UERR = 0x11,
+    PKT_USER_MSG = 0x12,
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
@@ -93,94 +85,42 @@ struct BROADCASTINFOHeader
     uint32_t originNodeID;
 };
 
-/*  --- local‑plane --- */
-typedef struct __attribute__((packed)) {
+struct UERQHeader
+{
+    uint32_t originNodeID;
+    uint32_t userID;
+};
+
+struct UREPHeader
+{
+    uint32_t originNodeID;
+    uint32_t destNodeID;
+    uint32_t userID;
+    uint16_t lifetime;
+    uint8_t numHops;
+};
+
+struct UERRHeader
+{
+    uint32_t userID;
     uint32_t nodeID;
-    uint8_t  listVer;
-    uint8_t  bloom64[8];
-    uint8_t  flags;              /* bit0: BLE‑slot‑free .. etc */
-} HELLO_SUMMARY_t;               /* 14 B */
+    uint32_t originNodeID;
+    uint32_t originalPacketID;
+};
 
-typedef struct __attribute__((packed)) {
-    uint32_t srcNodeID;
-    uint8_t  wantVer;
-} GET_DIFF_t;                    /* 5 B */
-
-typedef struct __attribute__((packed)) {
-    uint32_t dstNodeID;
-    uint8_t  baseVer;
-    uint8_t  n;
-    /* trailing n × UserDiffElem */
-} DIFF_REPLY_t;
-
-/* one diff element (9 B) */
-typedef struct __attribute__((packed)) {
-    uint32_t userID;
-    uint32_t nodeID;   /* 0 if “drop” */
-    uint8_t  seq;
-} UserDiffElem_t;
-
-/*  --- mobility advert --- */
-typedef struct __attribute__((packed)) {
-    uint32_t userID;
-    uint32_t newNodeID;
-    uint8_t  seq;
-    uint32_t prevNodeID;
-    /* +16 B signature optional */
-} MOVE_UPDATE_t;
-
-/*  --- on‑demand look‑up --- */
-typedef struct __attribute__((packed)) {
-    uint8_t  reqID;
-    uint32_t srcNodeID;
-    uint32_t userID;
-} LOC_REQ_t;
-
-typedef struct __attribute__((packed)) {
-    uint8_t  reqID;
-    uint32_t dstNodeID;
-    uint32_t userID;
-    uint32_t currNodeID;
-    uint8_t  seq;
-} LOC_REP_t;
-
-/*  --- bootstrap chunk pulls --- */
-typedef struct __attribute__((packed)) {
-    uint8_t chunkID;
-    uint8_t _rsv;
-} STATE_SYNC_REQ_t;
-
-typedef struct __attribute__((packed)) {
-    uint8_t chunkID;
-    uint8_t n;
-    /* trailing n × UserDiffElem_t  (same 9 B element) */
-} STATE_SYNC_CHUNK_t;
-
-/*  --- directory layer (slow gossip) --- */
-typedef struct __attribute__((packed)) {
-    uint32_t nodeID;
-    uint8_t  capFlags;
-    uint8_t  battery;
-    int16_t  lat_enc;   // could be removed
-    int16_t  lon_enc;   // could be removed
-    uint8_t  ver;
-} NODE_ADVERT_t;        /* 14 B */
-
-typedef struct __attribute__((packed)) {
-    uint8_t  chunkID;
-    uint8_t  n;
-    /* trailing n × UserDiffElem_t */
-} USER_SUMMARY_t;
-
-/*  --- optional early route‑error --- */
-typedef struct __attribute__((packed)) {
-    uint32_t userID;
-    uint32_t newNodeID;
-    uint8_t  seq;
-} USER_MOVED_t;
+struct UserMsgHeader
+{
+    uint32_t fromUserID;
+    uint32_t toUserID;
+    uint32_t toNodeID;
+};
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
 // Serialisation and deserialisation functions:
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Base
+// ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseBaseHeader(const BaseHeader &header, uint8_t *buffer)
 {
     size_t offset = 0;
@@ -213,6 +153,11 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
     return offset;
 }
 
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RREQ (Route Request)
+// ──────────────────────────────────────────────────────────────────────────────
+
 inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, size_t offset)
 {
     memcpy(buffer + offset, &header.originNodeID, 4);
@@ -235,6 +180,10 @@ inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, s
     return offset;
 }
 
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RREP (Route Reply)
+// ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, size_t offset)
 {
     memcpy(buffer + offset, &header.originNodeID, 4);
@@ -258,6 +207,11 @@ inline size_t deserialiseRREPHeader(const uint8_t *buffer, RREPHeader &header, s
     header.numHops = buffer[offset++];
     return offset;
 }
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// RERR (Route Error)
+// ──────────────────────────────────────────────────────────────────────────────
 
 inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, size_t offset)
 {
@@ -289,6 +243,11 @@ inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, s
     return offset;
 }
 
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ACK (Acknowledgement)
+// ──────────────────────────────────────────────────────────────────────────────
+
 inline size_t serialiseACKHeader(const ACKHeader &ack, uint8_t *buffer, size_t offset)
 {
     memcpy(buffer + offset, &ack.originalPacketID, 4);
@@ -302,6 +261,11 @@ inline size_t deserialiseACKHeader(const uint8_t *buffer, ACKHeader &ack, size_t
     offset += 4;
     return offset;
 }
+
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Data Header
+// ──────────────────────────────────────────────────────────────────────────────
 
 inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_t offset)
 {
@@ -317,6 +281,11 @@ inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, siz
     return offset;
 }
 
+
+// ──────────────────────────────────────────────────────────────────────────────
+// BroadcastInfo
+// ──────────────────────────────────────────────────────────────────────────────
+
 inline size_t serialiseBroadcastInfoHeader(const BROADCASTINFOHeader &data, uint8_t *buffer, size_t offset)
 {
     memcpy(buffer + offset, &data.originNodeID, 4);
@@ -330,5 +299,114 @@ inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, BROADCASTINF
     offset += 4;
     return offset;
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// UREQ (User Route Request)
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialiseUREQHeader(const UERQHeader &header, uint8_t *buffer, size_t offset)
+{
+    // originNodeID
+    memcpy(buffer + offset, &header.originNodeID, 4);
+    offset += 4;
+    // userID
+    memcpy(buffer + offset, &header.userID, 4);
+    offset += 4;
+    return offset;
+}
+
+inline size_t deserialiseUREQHeader(const uint8_t *buffer, UERQHeader &header, size_t offset)
+{
+    memcpy(&header.originNodeID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.userID,       buffer + offset, 4);
+    offset += 4;
+    return offset;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// UREP (User Route Reply)
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialiseUREPHeader(const UREPHeader &header, uint8_t *buffer, size_t offset)
+{
+    memcpy(buffer + offset, &header.originNodeID, 4);
+    offset += 4;
+    memcpy(buffer + offset, &header.destNodeID,   4);
+    offset += 4;
+    memcpy(buffer + offset, &header.userID,       4);
+    offset += 4;
+    memcpy(buffer + offset, &header.lifetime,     2);
+    offset += 2;
+    buffer[offset++] = header.numHops;
+    return offset;
+}
+
+inline size_t deserialiseUREPHeader(const uint8_t *buffer, UREPHeader &header, size_t offset)
+{
+    memcpy(&header.originNodeID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.destNodeID,   buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.userID,       buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.lifetime,     buffer + offset, 2);
+    offset += 2;
+    header.numHops = buffer[offset++];
+    return offset;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// UERR (User Error)
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialiseUERRHeader(const UERRHeader &header, uint8_t *buffer, size_t offset)
+{
+    memcpy(buffer + offset, &header.userID,           4);
+    offset += 4;
+    memcpy(buffer + offset, &header.nodeID,           4);
+    offset += 4;
+    memcpy(buffer + offset, &header.originNodeID,     4);
+    offset += 4;
+    memcpy(buffer + offset, &header.originalPacketID, 4);
+    offset += 4;
+    return offset;
+}
+
+inline size_t deserialiseUERRHeader(const uint8_t *buffer, UERRHeader &header, size_t offset)
+{
+    memcpy(&header.userID,           buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.nodeID,           buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.originNodeID,     buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.originalPacketID, buffer + offset, 4);
+    offset += 4;
+    return offset;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// USER_MSG (User Message)
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialiseUserMsgHeader(const UserMsgHeader &header, uint8_t *buffer, size_t offset)
+{
+    memcpy(buffer + offset, &header.fromUserID, 4);
+    offset += 4;
+    memcpy(buffer + offset, &header.toUserID,   4);
+    offset += 4;
+    memcpy(buffer + offset, &header.toNodeID,   4);
+    offset += 4;
+    return offset;
+}
+
+inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &header, size_t offset)
+{
+    memcpy(&header.fromUserID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.toUserID,   buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.toNodeID,   buffer + offset, 4);
+    offset += 4;
+    return offset;
+}
+
 
 #endif
