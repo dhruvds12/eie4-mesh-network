@@ -11,6 +11,7 @@
 #include "mqttmanager.h"
 #include <set>
 #include <unordered_map>
+#include "userSessionManager.h"
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
@@ -64,7 +65,7 @@ public:
      * @param RadioManager
      * @param myNodeID
      */
-    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager, uint32_t myNodeID);
+    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm);
 
     /**
      * @brief Initialise and create the router task
@@ -91,6 +92,7 @@ private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
+    UserSessionManager *_usm;
 
     TaskHandle_t _routerTaskHandler;
     TaskHandle_t _timerWorkerHandle;
@@ -128,8 +130,8 @@ private:
     // store messages that are waiting on ack
     std::map<uint32_t, ackBufferEntry> ackBuffer;
 
-    // Global user Table 
-    std::unordered_map<uint32_t, GutEntry> _gut;       /* userID → info */
+    // Global user Table
+    std::unordered_map<uint32_t, GutEntry> _gut; /* userID → info */
 
     // Neighbour bloom filter info
     std::unordered_map<uint32_t, NeighInfo> _nbrBloom; /* nodeID → bloom */
@@ -225,6 +227,14 @@ private:
      * @param payloadLen
      */
     void handleBroadcastInfo(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    void handleUREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
+
+    void handleUREP(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
+
+    void handleUERR(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
+
+    void handleDataAck(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
 
     // SEND PACKET HELPER FUNCTIONS
 

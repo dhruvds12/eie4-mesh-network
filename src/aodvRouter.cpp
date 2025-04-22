@@ -3,8 +3,8 @@
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
-AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID)
-    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr)
+AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm)
+    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm)
 {
 }
 
@@ -603,6 +603,17 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     transmitPacket(fwd, (uint8_t *)&bih, sizeof(BROADCASTINFOHeader), payload, payloadLen);
 }
 
+void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
+{
+}
+
+void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
+{
+}
+
+void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
+{
+}
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR
 // TODO: Need to complete
 

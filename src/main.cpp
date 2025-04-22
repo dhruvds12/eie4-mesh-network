@@ -13,6 +13,7 @@
 #include "wifiManager.h"
 #include "mqttManager.h"
 #include "NetworkMessageHandler.h"
+#include "userSessionManager.h"
 
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
@@ -38,8 +39,9 @@ uint32_t getNodeID()
 DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
+UserSessionManager userSessionManager;
 MQTTManager *mqttManager = nullptr;
-AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID());
+AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager);
 NetworkMessageHandler networkMessageHandler(&aodvRouter);
 
 void VextON(void)
