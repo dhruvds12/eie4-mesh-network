@@ -28,6 +28,21 @@ struct dataBufferEntry
     size_t length;
 };
 
+struct userMessageBufferEntry
+{
+    uint32_t senderID;
+    uint8_t *message;
+    size_t length;
+};
+
+struct PendingUserRouteEntry
+{
+    uint32_t senderID;   // who sent the message
+    uint32_t destUserID; // ultimate recipient user
+    uint8_t *message;    // payload pointer
+    size_t length;       // payload length
+};
+
 struct ackBufferEntry
 {
     uint8_t *packet; // store pointer to entire data
@@ -86,6 +101,8 @@ public:
 
     void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
 
+    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len);
+
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
 private:
@@ -114,6 +131,11 @@ private:
 
     // Map for entries awaiting RREP
     std::map<uint32_t, std::vector<dataBufferEntry>> _dataBuffer;
+
+    // Map for entries await UREP
+    std::map<uint32_t, std::vector<userMessageBufferEntry>> _userMsgBuffer;
+
+    std::map<uint32_t, std::vector<PendingUserRouteEntry>> _userRouteBuffer;
 
     // Set to store seen message ids
     std::unordered_set<uint32_t> receivedPacketIDs;
@@ -236,6 +258,8 @@ private:
 
     void handleDataAck(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
 
+    void handleUserMessage(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
+
     // SEND PACKET HELPER FUNCTIONS
 
     /**
@@ -264,6 +288,11 @@ private:
      */
     void sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID);
 
+    void sendUREQ(uint32_t userID);
+
+    void sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t userID, uint32_t nextHop, uint16_t lifetime, uint8_t hopCount);
+
+    void sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeID, uint32_t originalPacketID, uint32_t nextHop);
     /**
      * @brief
      *
@@ -309,6 +338,91 @@ private:
     bool tryImplicitAck(uint32_t packetID);
 
     void removeItemRoutingTable(uint32_t ID);
+
+    void flushUserRouteBuffer(uint32_t nodeID);
+
+    inline void AODVRouter::addUserMessage(uint32_t userID, const userMessageBufferEntry &entry)
+    {
+        Lock lock(_mutex);
+        _userMsgBuffer[userID].push_back(entry);
+    }
+
+    inline bool AODVRouter::hasBufferedUserMessages(uint32_t userID) const
+    {
+        Lock lock(_mutex);
+        auto it = _userMsgBuffer.find(userID);
+        return (it != _userMsgBuffer.end() && !it->second.empty());
+    }
+
+    inline std::vector<userMessageBufferEntry> AODVRouter::popBufferedUserMessages(uint32_t userID)
+    {
+        Lock lock(_mutex);
+        auto it = _userMsgBuffer.find(userID);
+        if (it == _userMsgBuffer.end())
+        {
+            return {};
+        }
+        // move out the vector to avoid copy
+        std::vector<userMessageBufferEntry> msgs = std::move(it->second);
+        _userMsgBuffer.erase(it);
+        return msgs;
+    }
+
+    inline void AODVRouter::updateGutEntry(uint32_t userID, const GutEntry &entry)
+    {
+        Lock lock(_mutex);
+        _gut[userID] = entry;
+    }
+
+    inline bool AODVRouter::getGutEntry(uint32_t userID, GutEntry &out) const
+    {
+        Lock lock(_mutex);
+        auto it = _gut.find(userID);
+        if (it == _gut.end())
+        {
+            return false;
+        }
+        out = it->second;
+        return true;
+    }
+
+    inline void AODVRouter::removeGutEntry(uint32_t userID)
+    {
+        Lock lock(_mutex);
+        _gut.erase(userID);
+    }
+
+    inline bool AODVRouter::hasGutEntry(uint32_t userID) const
+    {
+        Lock lock(_mutex);
+        return _gut.find(userID) != _gut.end();
+    }
+
+    inline void AODVRouter::addPendingUserRouteMessage(uint32_t nodeID, const PendingUserRouteEntry &entry)
+    {
+        Lock lock(_mutex);
+        _userRouteBuffer[nodeID].push_back(entry);
+    }
+
+    inline bool AODVRouter::hasPendingUserRouteMessages(uint32_t nodeID) const
+    {
+        Lock lock(_mutex);
+        auto it = _userRouteBuffer.find(nodeID);
+        return it != _userRouteBuffer.end() && !it->second.empty();
+    }
+
+    inline std::vector<PendingUserRouteEntry> AODVRouter::popPendingUserRouteMessages(uint32_t nodeID)
+    {
+        Lock lock(_mutex);
+        auto it = _userRouteBuffer.find(nodeID);
+        if (it == _userRouteBuffer.end())
+        {
+            return {};
+        }
+        auto msgs = std::move(it->second);
+        _userRouteBuffer.erase(it);
+        return msgs;
+    }
 
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);

@@ -278,6 +278,64 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
     transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), data, len);
 }
 
+void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *message, size_t len)
+{
+    // check GUT
+    GutEntry ge;
+    if (!getGutEntry(toUserID, ge))
+    {
+        uint8_t *copy = (uint8_t *)pvPortMalloc(len);
+        if (!copy)
+            return; // OOM
+        memcpy(copy, message, len);
+        userMessageBufferEntry buffer;
+        buffer.senderID = fromUserID;
+        buffer.message = copy;
+        buffer.length = len;
+        addUserMessage(toUserID, buffer);
+
+        sendUREQ(toUserID);
+        return;
+    }
+
+    RouteEntry re;
+
+    if (!getRoute(ge.nodeID, re))
+    {
+        uint8_t *copy = (uint8_t *)pvPortMalloc(len);
+        if (!copy)
+            return; // OOM
+        memcpy(copy, message, len);
+        Serial.printf("[AODVRouter] SendUserMessage No route for %u, sending RREQ.\n", ge.nodeID);
+        PendingUserRouteEntry entry;
+        entry.destUserID = toUserID;
+        entry.senderID = fromUserID;
+        entry.message = copy;
+        entry.length = len;
+
+        addPendingUserRouteMessage(ge.nodeID, entry);
+
+        sendRREQ(ge.nodeID);
+        return;
+    }
+
+    BaseHeader bh;
+    bh.destNodeID = re.nextHop;
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
+    bh.packetType = PKT_USER_MSG;
+    bh.flags = 0; // No flags set ie no ACK etc expected
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    UserMsgHeader umh;
+    umh.fromUserID = fromUserID;
+    umh.toNodeID = toUserID;
+    umh.toNodeID = ge.nodeID;
+
+    transmitPacket(bh, (uint8_t *)&umh, sizeof(UserMsgHeader), message, len);
+}
+
 void AODVRouter::handlePacket(RadioPacket *rxPacket)
 {
     if (rxPacket->len < sizeof(BaseHeader))
@@ -603,19 +661,163 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     transmitPacket(fwd, (uint8_t *)&bih, sizeof(BROADCASTINFOHeader), payload, payloadLen);
 }
 
+void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payload, size_t payloadLen)
+{
+    UserMsgHeader umh;
+    size_t offset = deserialiseUserMsgHeader(payload, umh, 0);
+
+    const uint8_t *message = payload + offset;
+    size_t messageLen = payloadLen - sizeof(UserMsgHeader);
+
+    if (_myNodeID == umh.toNodeID)
+    {
+        Serial.println("[AODVRouter] Entered I am receiver path User Message");
+        // TODO: need to properly extract the data without the header
+        Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
+        Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
+        return;
+    }
+
+    RouteEntry re;
+
+    if (!getRoute(umh.toNodeID, re))
+    {
+        Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", umh.toNodeID);
+        // special case where node self reports broken link therefore brokenNodeID == originNodeID
+        sendRERR(_myNodeID, base.srcNodeID, umh.toNodeID, base.packetID);
+        // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
+        return;
+    }
+    Serial.println("[AODVRouter] Forwading Data");
+
+    BaseHeader fwd = base;
+    fwd.destNodeID = re.nextHop;
+    fwd.hopCount++;
+    fwd.packetType = PKT_USER_MSG;
+
+    transmitPacket(base, (uint8_t *)&umh, sizeof(UserMsgHeader), message, messageLen);
+}
+
 void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
 {
+    UREQHeader ureq;
+    deserialiseUREQHeader(payload, ureq, 0);
+
+    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(ureq.originNodeID, base.srcNodeID, base.hopCount + 1);
+
+    if (_usm->knowsUser(ureq.userID))
+    {
+        sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1);
+        return;
+    }
+
+    GutEntry ge;
+    if (getGutEntry(ureq.userID, ge))
+    {
+
+        RouteEntry re;
+        if (getRoute(ge.nodeID, re))
+        {
+
+            sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1 + re.hopcount);
+            return;
+        }
+    }
+
+    // Forward UREQ
+    BaseHeader fwd = base;
+    fwd.srcNodeID = _myNodeID;
+    fwd.hopCount++;
+
+    transmitPacket(fwd, (uint8_t *)&ureq, sizeof(UREPHeader));
 }
 
 void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
 {
+    UREPHeader urep;
+    deserialiseUREPHeader(payload, urep, 0);
+
+    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(urep.destNodeID, base.srcNodeID, base.hopCount + 1);
+    GutEntry ge;
+    ge.nodeID = urep.destNodeID;
+    ge.seq = 0; // TODO: will need to be changed to actually handle seq number
+    ge.ts = 0;
+    updateGutEntry(urep.userID, ge);
+
+    if (_myNodeID == urep.originNodeID)
+    {
+        if (hasBufferedUserMessages(urep.userID))
+        {
+            flushUserRouteBuffer(urep.userID);
+        }
+
+        return;
+    }
+
+    RouteEntry re;
+    if (!getRoute(urep.originNodeID, re))
+    {
+        Serial.println("[AODVRouter] Got RREP but no route to the origin!");
+        return;
+    }
+
+    Serial.println("[AODVRouter] Forwading UREP");
+    BaseHeader fwd = base;
+    fwd.destNodeID = re.nextHop;
+    fwd.srcNodeID = _myNodeID;
+    fwd.hopCount++;
+
+    transmitPacket(fwd, (uint8_t *)&urep, sizeof(UREPHeader));
 }
 
 void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
 {
+    UERRHeader uerr;
+    deserialiseUERRHeader(payload, uerr, 0);
+
+    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+
+    // everyone should note the change in user location, need to check that the gut entry is for that node
+    GutEntry ge;
+    if (getGutEntry(uerr.userID, ge))
+    {
+        if (ge.nodeID == uerr.nodeID)
+        {
+            // or invalidate??
+            removeGutEntry(uerr.userID);
+        }
+    }
+
+    if (_myNodeID == uerr.originNodeID)
+    {
+        /* TODO: REMOVE FROM REQUIRED ACK LIST
+        If this packet required an ack remove as the route to the node was ok just the user was
+        not there however, user to user messages usually are NOT acked
+        */
+        return;
+    }
+
+    RouteEntry re;
+    // is there a route to the original sender
+    if (!getRoute(uerr.originNodeID, re))
+    {
+        Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
+        return;
+    }
+    Serial.println("[AODVRouter] Forwading RERR");
+    // forward the rerr to the original sender as there is a route
+    // no change to the rerr as that remains static
+
+    BaseHeader fwdBase = base;
+    fwdBase.destNodeID = re.nextHop;
+    fwdBase.srcNodeID = _myNodeID;
+    fwdBase.hopCount++;
+
+    transmitPacket(fwdBase, (uint8_t *)&uerr, sizeof(UERRHeader));
 }
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR
-// TODO: Need to complete
 
 void AODVRouter::sendRREQ(uint32_t destNodeID)
 {
@@ -658,7 +860,7 @@ void AODVRouter::sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t n
 void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID)
 {
     BaseHeader bh;
-    bh.destNodeID = BROADCAST_ADDR; // or unicast to original sender
+    bh.destNodeID = senderNodeID; // or unicast to original sender
     bh.srcNodeID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RERR;
@@ -674,6 +876,65 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
     rerr.senderNodeID = senderNodeID;
 
     transmitPacket(bh, (uint8_t *)&rerr, sizeof(RERRHeader));
+}
+
+void AODVRouter::sendUREQ(uint32_t userID)
+{
+    BaseHeader bh;
+    bh.destNodeID = BROADCAST_ADDR;
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_UREQ;
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    UREQHeader ureq;
+    ureq.originNodeID = _myNodeID;
+    ureq.userID = userID;
+
+    transmitPacket(bh, (uint8_t *)&ureq, sizeof(UREQHeader));
+}
+
+void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t userID, uint32_t nextHop, uint16_t lifetime, uint8_t hopCount)
+{
+    BaseHeader bh;
+    bh.destNodeID = nextHop;
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_RREP;
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    UREPHeader urep;
+    urep.destNodeID = destNodeID;
+    urep.originNodeID = originNodeID;
+    urep.numHops = hopCount;
+    urep.lifetime = lifetime;
+    urep.userID = userID;
+
+    transmitPacket(bh, (uint8_t *)&urep, sizeof(UREPHeader));
+}
+
+void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeID, uint32_t originalPacketID, uint32_t nextHop)
+{
+    BaseHeader bh;
+    bh.destNodeID = nextHop; // or unicast to original sender
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_RERR;
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    UERRHeader uerr;
+    uerr.nodeID = nodeID;
+    uerr.originNodeID = originalPacketID;
+    uerr.originNodeID = originNodeID;
+    uerr.userID = userID;
+
+    transmitPacket(bh, (uint8_t *)&uerr, sizeof(UERRHeader));
 }
 
 // DATA BUFFER HELPER FUNCTIONS
@@ -717,6 +978,23 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
             // Need to deallocate data in pending AND add back to the data buffer
             insertDataBuffer(destNodeID, pending.data, pending.length);
         }
+    }
+}
+
+void AODVRouter::flushUserRouteBuffer(uint32_t nodeID)
+{
+    std::vector<PendingUserRouteEntry> pendingList = popPendingUserRouteMessages(nodeID);
+
+    // Now for each pending user‑message, resend via your existing logic:
+    for (auto &entry : pendingList)
+    {
+        // sendUserMessage will check GUT/route again,
+        // retransmit if possible, or re-buffer appropriately.
+        sendUserMessage(entry.senderID,
+                        entry.destUserID,
+                        entry.message,
+                        entry.length);
+        vPortFree(entry.message);
     }
 }
 
