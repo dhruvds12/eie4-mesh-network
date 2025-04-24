@@ -20,7 +20,6 @@
 // #define BLUETOOTH
 
 #include "BluetoothManager.h"
-BluetoothManager btManager;
 
 // Define a custom service UUID (you can use any valid UUID)
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -38,6 +37,7 @@ DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 UserSessionManager userSessionManager;
+BluetoothManager btManager(&userSessionManager);
 MQTTManager *mqttManager = nullptr;
 AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager);
 NetworkMessageHandler networkMessageHandler(&aodvRouter);
@@ -132,8 +132,13 @@ void loop()
 
   delay(1000);
   // Example: print the number of connected clients.
-  Serial.print("Connected count: ");
-  Serial.println(btManager.getServer()->getConnectedCount());
+  uint8_t n = btManager.getServer()->getConnectedCount();
+  Serial.printf("Connected count: %u\n", n);
+
+  if (n) {
+      bool ok = btManager.sendBroadcast("hello");
+      Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+  }
 
   // static unsigned long lastPublishTime = 0;
   // if (millis() - lastPublishTime > 5000)

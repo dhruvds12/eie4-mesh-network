@@ -3,11 +3,21 @@
 
 #include <NimBLEDevice.h>
 #include <string>
+#include <map>
+#include "freertos/semphr.h"
+#include "userSessionManager.h"
+
+// Define UUIDs for the service and characteristic
+#define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+// TX: Phone → Node
+#define TX_CHAR_UUID "0000feed-0001-1000-8000-00805f9b34fb"
+// RX: Node → Phone
+#define RX_CHAR_UUID "0000feed-0002-1000-8000-00805f9b34fb"
 
 class BluetoothManager
 {
 public:
-    BluetoothManager();
+    BluetoothManager(UserSessionManager *sessionMgr);
     ~BluetoothManager();
 
     // Initialises the BLE stack, creates the server, service, and characteristic.
@@ -21,7 +31,7 @@ public:
     void stopAdvertising();
 
     // Send a message to all connected clients (broadcast via notification)
-    void sendBroadcast(const std::string &message);
+    bool sendBroadcast(const std::string &message);
 
     // Send a message to a specific client.
     // The connection info pointer must refer to the client you wish to target.
@@ -35,22 +45,46 @@ public:
 
 private:
     NimBLEServer *pServer;
-    NimBLECharacteristic *pCharacteristic;
+    NimBLEService *pService;
     NimBLEAdvertising *pAdvertising;
+    NimBLECharacteristic *pTxCharacteristic;
+    NimBLECharacteristic *pRxCharacteristic;
+
+    UserSessionManager *_userMgr;
+
+    std::map<uint16_t, NimBLEConnInfo> _connectedDevices;
+    SemaphoreHandle_t _connectedDevicesMutex;
+
+    void recordConnection(const NimBLEConnInfo &connInfo);
+    void removeConnection(const NimBLEConnInfo &connInfo);
+    void processIncomingMessage(uint16_t connHandle, const std::string &msg);
+    void onLoRaMessage(uint32_t targetUserId, const std::string &payload);
 
     // Inner class to handle connection callbacks.
     class ServerCallbacks : public NimBLEServerCallbacks
     {
     public:
-        ServerCallbacks(BluetoothManager *manager) : manager(manager) {}
+        ServerCallbacks(BluetoothManager *manager) : _mgr(manager) {}
         void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override;
         void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override;
 
     private:
-        BluetoothManager *manager;
+        BluetoothManager *_mgr;
     };
 
-    ServerCallbacks *serverCallbacks;
+    class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
+    {
+    public:
+        CharacteristicCallbacks(BluetoothManager *mgr) : _mgr(mgr) {}
+        void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override;
+
+    private:
+        BluetoothManager *_mgr;
+    };
+
+    ServerCallbacks *_serverCallbacks;
+    CharacteristicCallbacks *_txCallbacks;
+    CharacteristicCallbacks *_rxCallbacks;
 };
 
 #endif
