@@ -341,20 +341,20 @@ private:
 
     void flushUserRouteBuffer(uint32_t nodeID);
 
-    inline void AODVRouter::addUserMessage(uint32_t userID, const userMessageBufferEntry &entry)
+    inline void addUserMessage(uint32_t userID, const userMessageBufferEntry &entry)
     {
         Lock lock(_mutex);
         _userMsgBuffer[userID].push_back(entry);
     }
 
-    inline bool AODVRouter::hasBufferedUserMessages(uint32_t userID) const
+    inline bool hasBufferedUserMessages(uint32_t userID) const
     {
         Lock lock(_mutex);
         auto it = _userMsgBuffer.find(userID);
         return (it != _userMsgBuffer.end() && !it->second.empty());
     }
 
-    inline std::vector<userMessageBufferEntry> AODVRouter::popBufferedUserMessages(uint32_t userID)
+    inline std::vector<userMessageBufferEntry> popBufferedUserMessages(uint32_t userID)
     {
         Lock lock(_mutex);
         auto it = _userMsgBuffer.find(userID);
@@ -368,13 +368,13 @@ private:
         return msgs;
     }
 
-    inline void AODVRouter::updateGutEntry(uint32_t userID, const GutEntry &entry)
+    inline void updateGutEntry(uint32_t userID, const GutEntry &entry)
     {
         Lock lock(_mutex);
         _gut[userID] = entry;
     }
 
-    inline bool AODVRouter::getGutEntry(uint32_t userID, GutEntry &out) const
+    inline bool getGutEntry(uint32_t userID, GutEntry &out) const
     {
         Lock lock(_mutex);
         auto it = _gut.find(userID);
@@ -386,32 +386,32 @@ private:
         return true;
     }
 
-    inline void AODVRouter::removeGutEntry(uint32_t userID)
+    inline void removeGutEntry(uint32_t userID)
     {
         Lock lock(_mutex);
         _gut.erase(userID);
     }
 
-    inline bool AODVRouter::hasGutEntry(uint32_t userID) const
+    inline bool hasGutEntry(uint32_t userID) const
     {
         Lock lock(_mutex);
         return _gut.find(userID) != _gut.end();
     }
 
-    inline void AODVRouter::addPendingUserRouteMessage(uint32_t nodeID, const PendingUserRouteEntry &entry)
+    inline void addPendingUserRouteMessage(uint32_t nodeID, const PendingUserRouteEntry &entry)
     {
         Lock lock(_mutex);
         _userRouteBuffer[nodeID].push_back(entry);
     }
 
-    inline bool AODVRouter::hasPendingUserRouteMessages(uint32_t nodeID) const
+    inline bool hasPendingUserRouteMessages(uint32_t nodeID) const
     {
         Lock lock(_mutex);
         auto it = _userRouteBuffer.find(nodeID);
         return it != _userRouteBuffer.end() && !it->second.empty();
     }
 
-    inline std::vector<PendingUserRouteEntry> AODVRouter::popPendingUserRouteMessages(uint32_t nodeID)
+    inline std::vector<PendingUserRouteEntry> popPendingUserRouteMessages(uint32_t nodeID)
     {
         Lock lock(_mutex);
         auto it = _userRouteBuffer.find(nodeID);

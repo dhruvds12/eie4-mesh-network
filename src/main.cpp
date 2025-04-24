@@ -19,10 +19,8 @@
 // #define INITIATING_NODE
 // #define BLUETOOTH
 
-#ifdef BLUETOOTH
 #include "BluetoothManager.h"
 BluetoothManager btManager;
-#endif
 
 // Define a custom service UUID (you can use any valid UUID)
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -96,14 +94,11 @@ void setup()
     aodvRouter.setMQTTManager(mqttManager);
   }
 
-#ifdef BLUETOOTH
   // Initialize BLE using our abstraction.
   btManager.init("HeltecNode");
   btManager.startAdvertising();
   Serial.println("NimBLE advertising started...");
-#endif
 
-#ifndef BLUETOOTH
   if (!radioManager.begin())
   {
     Serial.println("Radio Manager initialization failed!");
@@ -122,7 +117,6 @@ void setup()
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
   }
-#endif
 
 #if defined(INITIATING_NODE)
   const char initMsg[] = "PING";
@@ -135,12 +129,12 @@ void setup()
 // --- Main Loop ---
 void loop()
 {
-#ifdef BLUETOOTH
+
   delay(1000);
   // Example: print the number of connected clients.
   Serial.print("Connected count: ");
   Serial.println(btManager.getServer()->getConnectedCount());
-#endif
+
   // static unsigned long lastPublishTime = 0;
   // if (millis() - lastPublishTime > 5000)
   // {
