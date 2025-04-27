@@ -6,6 +6,7 @@
 #include <map>
 #include "freertos/semphr.h"
 #include "userSessionManager.h"
+#include "NetworkMessageHandler.h"
 
 // Define UUIDs for the service and characteristic
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -17,7 +18,7 @@
 class BluetoothManager
 {
 public:
-    BluetoothManager(UserSessionManager *sessionMgr);
+    BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler);
     ~BluetoothManager();
 
     // Initialises the BLE stack, creates the server, service, and characteristic.
@@ -51,9 +52,22 @@ private:
     NimBLECharacteristic *pRxCharacteristic;
 
     UserSessionManager *_userMgr;
+    NetworkMessageHandler *_netHandler;
 
     std::map<uint16_t, NimBLEConnInfo> _connectedDevices;
     SemaphoreHandle_t _connectedDevicesMutex;
+
+    enum BLEMessageType : uint8_t
+    {
+        BROADCAST = 0x01,
+        NODE_MSG = 0x02,
+        USER_MSG = 0x03,
+        USER_ID_UPDATE = 0x04,
+        LIST_NODES_REQ = 0x05,
+        LIST_USERS_REQ = 0x06,
+        LIST_NODE_RESP = 0x07,
+        LIST_USERS_RESP = 0x08,
+    };
 
     void recordConnection(const NimBLEConnInfo &connInfo);
     void removeConnection(const NimBLEConnInfo &connInfo);
@@ -85,6 +99,23 @@ private:
     ServerCallbacks *_serverCallbacks;
     CharacteristicCallbacks *_txCallbacks;
     CharacteristicCallbacks *_rxCallbacks;
+
+    static std::string encodeBroadcast(const std::string &text)
+    {
+        std::string pkt;
+        pkt.reserve(1 + 4 + 4 + text.size());
+
+        pkt.push_back(static_cast<char>(1)); // MessageType.BROADCAST = 1
+
+        uint32_t zero = 0;
+        for (int i = 3; i >= 0; --i) // destA = 0
+            pkt.push_back((zero >> (8 * i)) & 0xFF);
+        for (int i = 3; i >= 0; --i) // destB = 0
+            pkt.push_back((zero >> (8 * i)) & 0xFF);
+
+        pkt += text; // UTF-8 body
+        return pkt;
+    }
 };
 
 #endif

@@ -34,4 +34,4 @@ private:
     void processQueue();
 };
 
-#endif // NETWORKMESSAGEHANDLER_H
+#endif

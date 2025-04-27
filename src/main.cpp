@@ -37,10 +37,10 @@ DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 UserSessionManager userSessionManager;
-BluetoothManager btManager(&userSessionManager);
 MQTTManager *mqttManager = nullptr;
 AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager);
 NetworkMessageHandler networkMessageHandler(&aodvRouter);
+BluetoothManager btManager(&userSessionManager, &networkMessageHandler);
 
 void VextON(void)
 {
@@ -130,14 +130,16 @@ void setup()
 void loop()
 {
 
-  delay(1000);
+  delay(10000);
   // Example: print the number of connected clients.
   uint8_t n = btManager.getServer()->getConnectedCount();
   Serial.printf("Connected count: %u\n", n);
 
-  if (n) {
-      bool ok = btManager.sendBroadcast("hello");
-      Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+  if (n)
+  {
+    std::string message = "bye";
+    bool ok = btManager.sendBroadcast(message);
+    Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
   }
 
   // static unsigned long lastPublishTime = 0;

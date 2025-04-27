@@ -1,8 +1,9 @@
 #include "BluetoothManager.h"
 #include <NimBLEDevice.h>
+#include "packet.h"
 
-BluetoothManager::BluetoothManager(UserSessionManager *sessionMgr)
-    : pServer(nullptr), pService(nullptr), pAdvertising(nullptr), _userMgr(sessionMgr), _serverCallbacks(nullptr), _txCallbacks(nullptr), _rxCallbacks(nullptr), pTxCharacteristic(nullptr), pRxCharacteristic(nullptr)
+BluetoothManager::BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler)
+    : pServer(nullptr), pService(nullptr), pAdvertising(nullptr), _userMgr(sessionMgr), _netHandler(networkHandler), _serverCallbacks(nullptr), _txCallbacks(nullptr), _rxCallbacks(nullptr), pTxCharacteristic(nullptr), pRxCharacteristic(nullptr)
 {
     _connectedDevicesMutex = xSemaphoreCreateMutex();
 }
@@ -74,7 +75,7 @@ bool BluetoothManager::sendBroadcast(const std::string &message)
 {
     if (!pRxCharacteristic)
         return false;
-    pRxCharacteristic->setValue(message);
+    pRxCharacteristic->setValue(encodeBroadcast(message));
     pRxCharacteristic->notify();
     return true;
 }
@@ -130,15 +131,89 @@ void BluetoothManager::removeConnection(const NimBLEConnInfo &connInfo)
 
 void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::string &msg)
 {
-    // Example protocol: "ID:<userID>" to register user
-    if (msg.rfind("ID:", 0) == 0)
-    {
-        uint32_t userID = std::stoul(msg.substr(3));
-        // Store or refresh session
-        _userMgr->addOrRefresh(userID, connHandle);
+    // Need at least 1 + 4 + 4 = 9 bytes of header
+    if (msg.size() < 9) {
+        Serial.println("Incoming BLE packet too short");
         return;
     }
-    // TODO: dispatch other message types here
+
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(msg.data());
+
+    // parse little-endian
+    uint8_t  raw  = data[0];
+    auto type = static_cast<BLEMessageType>(raw);
+
+    uint32_t destA = uint32_t(data[1])
+                   | (uint32_t(data[2]) << 8)
+                   | (uint32_t(data[3]) << 16)
+                   | (uint32_t(data[4]) << 24);
+    uint32_t destB = uint32_t(data[5])
+                   | (uint32_t(data[6]) << 8)
+                   | (uint32_t(data[7]) << 16)
+                   | (uint32_t(data[8]) << 24);
+
+    // remaining bytes are the UTF-8 payload
+    std::string body;
+    if (msg.size() > 9) {
+        body.assign(reinterpret_cast<const char*>(data + 9),
+                    msg.size() - 9);
+    }
+
+
+    switch (type)
+    {
+    // case USER_ID_UPDATE:
+    // {
+    //     uint32_t userID = std::stoul(body);
+    //     _userMgr->addOrRefresh(userID, connHandle);
+    // }
+    // break;
+
+    // case LIST_NODES_REQ:
+    // {
+    //     // You’ll need a way to ask the router for its known node IDs:
+    //     auto nodes = _router->getKnownNodeIDs();
+    //     auto resp = encodeListResponse(LIST_NODES_RESP, nodes);
+    //     sendToClient(connHandle, resp);
+    // }
+    // break;
+
+    // case LIST_USERS_REQ:
+    // {
+    //     auto users = _userMgr->allUsers()
+    //                      .filter(u→u.isConnected)
+    //                      .map(u→u.userID);
+    //     auto resp = encodeListResponse(LIST_USERS_RESP, users);
+    //     sendToClient(connHandle, resp);
+    // }
+    // break;
+
+    // case NODE_MSG:
+    //     // destA = target nodeID
+    //     _netHandler->enqueueMessage(destA, body.c_str());
+    //     break;
+
+    // case USER_MSG:
+    // {
+    //     // Who am I? I need the sender’s userID:
+    //     uint32_t fromUser = _userMgr->getUserIDForHandle(connHandle);
+    //     uint32_t toUser = destA;
+    //     _router->sendUserMessage(fromUser, toUser,
+    //                              (const uint8_t *)body.data(),
+    //                              body.size());
+    // }
+    // break;
+
+    case BROADCAST:
+    {
+        _netHandler->enqueueMessage(BROADCAST_ADDR, body.c_str());
+    }
+    break;
+
+    default:
+      
+        break;
+    }
 }
 
 // --- Implementation of the inner ServerCallbacks class ---
@@ -165,6 +240,12 @@ void BluetoothManager::CharacteristicCallbacks::onWrite(NimBLECharacteristic *pC
 {
     uint16_t handle = connInfo.getConnHandle();
     std::string msg = pChr->getValue();
-    Serial.printf("Received from conn %u: %s\n", handle, msg.c_str());
+    Serial.printf("Received from conn %u (len=%u): ", handle, msg.length());
+    for (uint8_t b : msg)
+    {
+        Serial.printf("%02X ", b);
+    }
+    Serial.println();
+
     _mgr->processIncomingMessage(handle, msg);
 }

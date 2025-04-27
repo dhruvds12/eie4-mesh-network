@@ -282,29 +282,35 @@ void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {
+    BaseHeader bh;
     RouteEntry re;
-
-    if (!getRoute(destNodeID, re))
+    if (destNodeID != BROADCAST_ADDR)
     {
-        Serial.printf("[AODVRouter] No route for %u, sending RREQ.\n", destNodeID);
-
-        uint8_t *copy = (uint8_t *)pvPortMalloc(len);
-        if (copy)
+        if (!getRoute(destNodeID, re))
         {
-            memcpy(copy, data, len);
-            insertDataBuffer(destNodeID, copy, len);
-        }
-        else
-        {
-            Serial.println("[AODVRouter] Memory allocation failed for data buffer");
-        }
+            Serial.printf("[AODVRouter] No route for %u, sending RREQ.\n", destNodeID);
 
-        sendRREQ(destNodeID);
-        return;
+            uint8_t *copy = (uint8_t *)pvPortMalloc(len);
+            if (copy)
+            {
+                memcpy(copy, data, len);
+                insertDataBuffer(destNodeID, copy, len);
+            }
+            else
+            {
+                Serial.println("[AODVRouter] Memory allocation failed for data buffer");
+            }
+
+            sendRREQ(destNodeID);
+            return;
+        }
+        bh.destNodeID = re.nextHop;
+    }
+    else
+    {
+        bh.destNodeID = BROADCAST_ADDR;
     }
 
-    BaseHeader bh;
-    bh.destNodeID = re.nextHop;
     bh.srcNodeID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_DATA;
@@ -645,21 +651,33 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         return;
     }
+    
+    BaseHeader fwd = base;
+    if (dataHeader.finalDestID == BROADCAST_ADDR){
+        // TODO: need to stop the broadcast at some point
+        Serial.println("[AODVRouter] Entered I am received BROADCAST DATA path");
+        // TODO: need to properly extract the data without the header
+        Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
+        Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        fwd.destNodeID = BROADCAST_ADDR;
 
-    RouteEntry re;
+    } else {
+        RouteEntry re;
 
-    if (!getRoute(dataHeader.finalDestID, re))
-    {
-        Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
-        // special case where node self reports broken link therefore brokenNodeID == originNodeID
-        sendRERR(_myNodeID, base.srcNodeID, dataHeader.finalDestID, base.packetID);
-        // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
-        return;
+        if (!getRoute(dataHeader.finalDestID, re))
+        {
+            Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
+            // special case where node self reports broken link therefore brokenNodeID == originNodeID
+            sendRERR(_myNodeID, base.srcNodeID, dataHeader.finalDestID, base.packetID);
+            // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
+            return;
+        }
+        
+        fwd.destNodeID = re.nextHop;
     }
+
     Serial.println("[AODVRouter] Forwading Data");
 
-    BaseHeader fwd = base;
-    fwd.destNodeID = re.nextHop;
     fwd.hopCount++;
     fwd.packetType = PKT_DATA;
     // we don't change src node in data message because we should not be learning
