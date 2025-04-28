@@ -10,7 +10,9 @@
 
 // Structure to hold outgoing messages for transmission.
 struct OutgoingMessage {
-    uint32_t destNodeID;
+    uint32_t destID; // can be userID or nodeID depending on the bool
+    uint32_t userID;
+    bool userMessage;
     char message[128]; // Adjust size as needed
 };
 
@@ -21,7 +23,7 @@ public:
     ~NetworkMessageHandler();
 
     // Enqueue a message for transmission.
-    bool enqueueMessage(uint32_t destNodeID, const char* message);
+    bool enqueueMessage(uint32_t destID, bool userMessage, const char* message, uint32_t userID = 0);
 
 private:
     IRouter* _router;                  // Dependency-injected router instance

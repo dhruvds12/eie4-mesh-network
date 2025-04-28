@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-// Basic interface that will allow swapping between routers if needed 
+// Basic interface that will allow swapping between routers if needed
 // TODO: Expand the interface as required
 class IRouter
 {
@@ -13,6 +13,7 @@ public:
 
     virtual bool begin() = 0;
     virtual void sendData(uint32_t destNodeID, const uint8_t *data, size_t len) = 0;
+    virtual void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len) = 0;
 };
 
 #endif

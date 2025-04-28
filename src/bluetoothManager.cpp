@@ -143,11 +143,11 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     uint8_t  raw  = data[0];
     auto type = static_cast<BLEMessageType>(raw);
 
-    uint32_t destA = uint32_t(data[1])
+    uint32_t dest = uint32_t(data[1])
                    | (uint32_t(data[2]) << 8)
                    | (uint32_t(data[3]) << 16)
                    | (uint32_t(data[4]) << 24);
-    uint32_t destB = uint32_t(data[5])
+    uint32_t sender = uint32_t(data[5])
                    | (uint32_t(data[6]) << 8)
                    | (uint32_t(data[7]) << 16)
                    | (uint32_t(data[8]) << 24);
@@ -162,12 +162,11 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     switch (type)
     {
-    // case USER_ID_UPDATE:
-    // {
-    //     uint32_t userID = std::stoul(body);
-    //     _userMgr->addOrRefresh(userID, connHandle);
-    // }
-    // break;
+    case USER_ID_UPDATE:
+    {
+        _userMgr->addOrRefresh(sender, connHandle);
+    }
+    break;
 
     // case LIST_NODES_REQ:
     // {
@@ -188,25 +187,20 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     // }
     // break;
 
-    // case NODE_MSG:
-    //     // destA = target nodeID
-    //     _netHandler->enqueueMessage(destA, body.c_str());
-    //     break;
+    case NODE_MSG:
+        // destA = target nodeID
+        _netHandler->enqueueMessage(dest, false, body.c_str());
+        break;
 
-    // case USER_MSG:
-    // {
-    //     // Who am I? I need the sender’s userID:
-    //     uint32_t fromUser = _userMgr->getUserIDForHandle(connHandle);
-    //     uint32_t toUser = destA;
-    //     _router->sendUserMessage(fromUser, toUser,
-    //                              (const uint8_t *)body.data(),
-    //                              body.size());
-    // }
-    // break;
+    case USER_MSG:
+    {
+        _netHandler->enqueueMessage(dest, false, body.c_str(), sender);
+    }
+    break;
 
     case BROADCAST:
     {
-        _netHandler->enqueueMessage(BROADCAST_ADDR, body.c_str());
+        _netHandler->enqueueMessage(BROADCAST_ADDR, false, body.c_str());
     }
     break;
 
