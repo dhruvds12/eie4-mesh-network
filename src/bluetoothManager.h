@@ -8,9 +8,9 @@
 #include "userSessionManager.h"
 #include "NetworkMessageHandler.h"
 #include "IClientNotifier.h"
-#include <vector>               
-#include <freertos/FreeRTOS.h> 
-#include <freertos/queue.h> 
+#include <vector>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 // Define UUIDs for the service and characteristic
 #define SERVICE_UUID "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
@@ -23,8 +23,16 @@ struct BleOut
 {
     BleType type;
     uint16_t connHandle;
+    uint32_t to; // to a node or user -> depends on type
+    uint32_t from; // from a node or a user -> depends on type
     std::vector<uint8_t> data;
 };
+
+struct BleIn {
+    uint16_t       connHandle;
+    std::string   data;
+  };
+  
 
 class BluetoothManager : public IClientNotifier
 {
@@ -32,9 +40,10 @@ public:
     BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler);
     ~BluetoothManager();
 
-    void setNetworkMessageHandler(NetworkMessageHandler* nh) {
+    void setNetworkMessageHandler(NetworkMessageHandler *nh)
+    {
         _netHandler = nh;
-      }
+    }
 
     // Initialises the BLE stack, creates the server, service, and characteristic.
     // deviceName is used for both the device name and in advertisement data.
@@ -74,6 +83,9 @@ private:
     std::map<uint16_t, NimBLEConnInfo> _connectedDevices;
     SemaphoreHandle_t _connectedDevicesMutex;
 
+    QueueHandle_t    _bleRxQueue;
+    static void      bleRxWorker(void *pv);
+
     QueueHandle_t _bleTxQueue;
     static void bleTxWorker(void *);
 
@@ -99,53 +111,40 @@ private:
         LIST_USERS_RESP = 0x08,
     };
 
+    
     void recordConnection(const NimBLEConnInfo &connInfo);
     void removeConnection(const NimBLEConnInfo &connInfo);
     void processIncomingMessage(uint16_t connHandle, const std::string &msg);
     void onLoRaMessage(uint32_t targetUserId, const std::string &payload);
-
+    
     // Inner class to handle connection callbacks.
     class ServerCallbacks : public NimBLEServerCallbacks
     {
-    public:
+        public:
         ServerCallbacks(BluetoothManager *manager) : _mgr(manager) {}
         void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override;
         void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override;
-
-    private:
+        
+        private:
         BluetoothManager *_mgr;
     };
-
+    
     class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     {
-    public:
+        public:
         CharacteristicCallbacks(BluetoothManager *mgr) : _mgr(mgr) {}
         void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override;
-
-    private:
+        
+        private:
         BluetoothManager *_mgr;
     };
-
+    
     ServerCallbacks *_serverCallbacks;
     CharacteristicCallbacks *_txCallbacks;
     CharacteristicCallbacks *_rxCallbacks;
-
-    static std::string encodeBroadcast(const std::string &text)
-    {
-        std::string pkt;
-        pkt.reserve(1 + 4 + 4 + text.size());
-
-        pkt.push_back(static_cast<char>(1)); // MessageType.BROADCAST = 1
-
-        uint32_t zero = 0;
-        for (int i = 3; i >= 0; --i) // destA = 0
-            pkt.push_back((zero >> (8 * i)) & 0xFF);
-        for (int i = 3; i >= 0; --i) // destB = 0
-            pkt.push_back((zero >> (8 * i)) & 0xFF);
-
-        pkt += text; // UTF-8 body
-        return pkt;
-    }
+    
+    static std::vector<uint8_t> encodeListResponse(BLEMessageType type, const std::vector<uint32_t> &ids);
+    static std::string encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload);
 };
 
 #endif

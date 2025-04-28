@@ -106,6 +106,9 @@ public:
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
+    std::vector<uint32_t> getKnownNodeIDs() const;
+    std::vector<uint32_t> getKnownUserIDs() const;
+
 private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;

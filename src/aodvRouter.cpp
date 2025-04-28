@@ -54,7 +54,7 @@ bool AODVRouter::begin()
     */
     _broadcastTimer = xTimerCreate(
         "BroadcastTimer",
-        pdMS_TO_TICKS(3600000),  // 3600000ms = 1 hour
+        pdMS_TO_TICKS(900000),   // 900000ms = 15 minute
         pdTRUE,                  // Auto-reload for periodic execution
         (void *)this,            // Pass the current router instance as timer ID
         broadcastTimerCallback); // Callback to send broadcast info
@@ -157,43 +157,56 @@ void AODVRouter::sendBroadcastInfo()
     constexpr size_t IDS_PER_PKT = SPACE / sizeof(uint32_t);
 
     size_t idxA = 0, idxR = 0;
-    while (idxA < added.size() || idxR < removed.size())
+    if (added.empty() && removed.empty())
     {
-
-        size_t numA = std::min(IDS_PER_PKT, added.size() - idxA);
-        size_t remaining = IDS_PER_PKT - numA;
-        size_t numR = remaining == 0 ? 0 : std::min(remaining, removed.size() - idxR);
-
         DiffBroadcastInfoHeader dh;
-        dh.numAdded = uint16_t(numA);
-        dh.numRemoved = uint16_t(numR);
+        dh.numAdded = 0;
+        dh.numRemoved = 0;
         dh.originNodeID = _myNodeID;
 
-        std::vector<uint8_t> payload;
-        payload.reserve((numA + numR) * sizeof(uint32_t));
+        transmitPacket(bh, reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR);
+    }
+    else
+    {
 
-        // first the added IDs
-        for (size_t i = 0; i < numA; ++i)
+        while (idxA < added.size() || idxR < removed.size())
         {
-            uint32_t uid = added[idxA + i];
-            auto p = reinterpret_cast<const uint8_t *>(&uid);
-            payload.insert(payload.end(), p, p + sizeof(uid));
-        }
-        // then the removed IDs
-        for (size_t i = 0; i < numR; ++i)
-        {
-            uint32_t uid = removed[idxR + i];
-            auto p = reinterpret_cast<const uint8_t *>(&uid);
-            payload.insert(payload.end(), p, p + sizeof(uid));
-        }
 
-        transmitPacket(
-            bh,
-            reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR,
-            payload.data(), payload.size());
+            size_t numA = std::min(IDS_PER_PKT, added.size() - idxA);
+            size_t remaining = IDS_PER_PKT - numA;
+            size_t numR = remaining == 0 ? 0 : std::min(remaining, removed.size() - idxR);
 
-        idxA += numA;
-        idxR += numR;
+            DiffBroadcastInfoHeader dh;
+            dh.numAdded = uint16_t(numA);
+            dh.numRemoved = uint16_t(numR);
+            dh.originNodeID = _myNodeID;
+
+            std::vector<uint8_t> payload;
+            payload.reserve((numA + numR) * sizeof(uint32_t));
+
+            // first the added IDs
+            for (size_t i = 0; i < numA; ++i)
+            {
+                uint32_t uid = added[idxA + i];
+                auto p = reinterpret_cast<const uint8_t *>(&uid);
+                payload.insert(payload.end(), p, p + sizeof(uid));
+            }
+            // then the removed IDs
+            for (size_t i = 0; i < numR; ++i)
+            {
+                uint32_t uid = removed[idxR + i];
+                auto p = reinterpret_cast<const uint8_t *>(&uid);
+                payload.insert(payload.end(), p, p + sizeof(uid));
+            }
+
+            transmitPacket(
+                bh,
+                reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR,
+                payload.data(), payload.size());
+
+            idxA += numA;
+            idxR += numR;
+        }
     }
 }
 
@@ -649,7 +662,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, actualData, actualDataLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.srcNodeID, actualData, actualDataLen});
         return;
     }
 
@@ -661,7 +674,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, actualData, actualDataLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0,0, actualData, actualDataLen});
         fwd.destNodeID = BROADCAST_ADDR;
     }
     else
@@ -782,7 +795,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
-        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, message, messageLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID,message, messageLen});
         return;
     }
 
@@ -1378,6 +1391,27 @@ void AODVRouter::removeItemRoutingTable(uint32_t id)
 {
     Lock l(_mutex);
     _routeTable.erase(id);
+}
+
+// AODVRouter.cpp (inside class AODVRouter)
+
+std::vector<uint32_t> AODVRouter::getKnownNodeIDs() const
+{
+    Lock l(_mutex);
+    return std::vector<uint32_t>(discoveredNodes.begin(),
+                                 discoveredNodes.end());
+}
+
+std::vector<uint32_t> AODVRouter::getKnownUserIDs() const
+{
+    Lock l(_mutex);
+    std::vector<uint32_t> users;
+    users.reserve(_gut.size());
+    for (auto &kv : _gut)
+    {
+        users.push_back(kv.first);
+    }
+    return users;
 }
 
 /*

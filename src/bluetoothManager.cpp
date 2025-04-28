@@ -20,9 +20,14 @@ void BluetoothManager::init(const std::string &deviceName)
     _bleTxQueue = xQueueCreate(20, sizeof(BleOut *));
     xTaskCreate(bleTxWorker, "BLE-TX", 4096, this, tskIDLE_PRIORITY + 1, nullptr);
 
+    _bleRxQueue = xQueueCreate(20, sizeof(BleIn *));
+    configASSERT(_bleRxQueue);
+    // start the RX worker at a suitable priority
+    xTaskCreate(bleRxWorker, "BLE-RX", 4096, this, tskIDLE_PRIORITY + 2, nullptr);
     // Initialize NimBLE with a device name and set it for advertisement.
     NimBLEDevice::init(deviceName);
     NimBLEDevice::setDeviceName(deviceName);
+    NimBLEDevice::setMTU(247);
 
     // Create the BLE server and assign callbacks.
     pServer = NimBLEDevice::createServer();
@@ -57,6 +62,21 @@ void BluetoothManager::init(const std::string &deviceName)
     pAdvertising->setScanResponseData(scanResponse);
 }
 
+void BluetoothManager::bleRxWorker(void *pv)
+{
+    auto *mgr = static_cast<BluetoothManager *>(pv);
+    BleIn *pkt;
+    for (;;)
+    {
+        if (xQueueReceive(mgr->_bleRxQueue, &pkt, portMAX_DELAY) == pdTRUE)
+        {
+            // handle it (in FreRTOS context, not NimBLE ISR)
+            mgr->processIncomingMessage(pkt->connHandle, pkt->data);
+            delete pkt;
+        }
+    }
+}
+
 void BluetoothManager::bleTxWorker(void *pv)
 {
     auto mgr = static_cast<BluetoothManager *>(pv);
@@ -65,13 +85,26 @@ void BluetoothManager::bleTxWorker(void *pv)
     {
         if (xQueueReceive(mgr->_bleTxQueue, &pkt, portMAX_DELAY) == pdTRUE)
         {
+            std::string raw;
             switch (pkt->type)
             {
             case BleType::BLE_UnicastUser:
-                mgr->sendToClient(pkt->connHandle, std::string(pkt->data.begin(), pkt->data.end()));
+                raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data);
+                mgr->sendToClient(pkt->connHandle, raw);
+                break;
+            case BleType::BLE_Node:
+                raw = encodeMessage(NODE_MSG, pkt->to, pkt->from, pkt->data);
+                mgr->sendBroadcast(raw);
                 break;
             case BleType::BLE_Broadcast:
-                mgr->sendBroadcast(std::string(pkt->data.begin(), pkt->data.end()));
+                raw = encodeMessage(BROADCAST, pkt->to, pkt->from, pkt->data);
+                mgr->sendBroadcast(raw);
+                break;
+            case BleType::BLE_List_Users:
+                mgr->sendToClient(pkt->connHandle, std::string(pkt->data.begin(), pkt->data.end()));
+                break;
+            case BleType::BLE_List_Nodes:
+                mgr->sendToClient(pkt->connHandle, std::string(pkt->data.begin(), pkt->data.end()));
                 break;
             default:
                 break;
@@ -102,7 +135,7 @@ bool BluetoothManager::sendBroadcast(const std::string &message)
 {
     if (!pRxCharacteristic)
         return false;
-    pRxCharacteristic->setValue(encodeBroadcast(message));
+    pRxCharacteristic->setValue(message);
     pRxCharacteristic->notify();
     return true;
 }
@@ -125,7 +158,7 @@ bool BluetoothManager::sendToClient(uint16_t connHandle, const std::string &mess
 
 bool BluetoothManager::notify(const Outgoing &o)
 {
-    auto pkt = new BleOut{o.type, _userMgr->getBleHandle(o.userID), std::vector<uint8_t>(o.data, o.data + o.length)};
+    auto pkt = new BleOut{o.type, _userMgr->getBleHandle(o.to), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
     return enqueueBleOut(pkt);
 }
 
@@ -196,24 +229,36 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     }
     break;
 
-        // case LIST_NODES_REQ:
-        // {
-        //     // You’ll need a way to ask the router for its known node IDs:
-        //     auto nodes = _router->getKnownNodeIDs();
-        //     auto resp = encodeListResponse(LIST_NODES_RESP, nodes);
-        //     sendToClient(connHandle, resp);
-        // }
-        // break;
+    case LIST_NODES_REQ:
+    {
+        // grab a snapshot of all known nodes
+        auto nodes = _netHandler->getKnownNodes();
+        // serialize into a little‐endian BLE packet
+        auto resp = encodeListResponse(LIST_NODE_RESP, nodes);
+        // push it into the BLE‐TX queue as a unicast back to the requester
+        auto pkt = new BleOut{
+            BleType::BLE_List_Nodes,
+            connHandle,
+            0,
+            0,
+            std::move(resp)};
+        enqueueBleOut(pkt);
+    }
+    break;
 
-        // case LIST_USERS_REQ:
-        // {
-        //     auto users = _userMgr->allUsers()
-        //                      .filter(u→u.isConnected)
-        //                      .map(u→u.userID);
-        //     auto resp = encodeListResponse(LIST_USERS_RESP, users);
-        //     sendToClient(connHandle, resp);
-        // }
-        // break;
+    case LIST_USERS_REQ:
+    {
+        auto users = _netHandler->getKnownUsers();
+        auto resp = encodeListResponse(LIST_USERS_RESP, users);
+        auto pkt = new BleOut{
+            BleType::BLE_List_Users,
+            connHandle,
+            0,
+            0,
+            std::move(resp)};
+        enqueueBleOut(pkt);
+    }
+    break;
 
     case NODE_MSG:
         // destA = target nodeID
@@ -236,6 +281,47 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
         break;
     }
+}
+
+std::vector<uint8_t> BluetoothManager::encodeListResponse(BLEMessageType type, const std::vector<uint32_t> &ids)
+{
+    size_t n = ids.size();
+    std::vector<uint8_t> pkt;
+    pkt.reserve(1 + 4 + 4 + 4 + 4 * n);
+
+    // 1B type + 8B zeros (destA/destB)
+    pkt.push_back(uint8_t(type));
+    for (int i = 0; i < 8; ++i)
+        pkt.push_back(0);
+
+    // 4B count, little endian
+    for (int b = 0; b < 4; ++b)
+        pkt.push_back((n >> (8 * b)) & 0xFF);
+
+    // each ID in LE
+    for (auto id : ids)
+    {
+        for (int b = 0; b < 4; ++b)
+            pkt.push_back((id >> (8 * b)) & 0xFF);
+    }
+
+    return pkt;
+}
+
+std::string BluetoothManager::encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload)
+{
+    std::string pkt;
+    pkt.reserve(1 + 4 + 4 + payload.size());
+    pkt.push_back(static_cast<char>(type));
+
+    for (int b = 0; b < 4; ++b)
+        pkt.push_back(static_cast<char>((to >> (8 * b)) & 0xFF));
+
+    for (int b = 0; b < 4; ++b)
+        pkt.push_back(static_cast<char>((from >> (8 * b)) & 0xFF));
+
+    pkt.insert(pkt.end(), payload.begin(), payload.end());
+    return pkt;
 }
 
 // --- Implementation of the inner ServerCallbacks class ---
@@ -269,5 +355,11 @@ void BluetoothManager::CharacteristicCallbacks::onWrite(NimBLECharacteristic *pC
     }
     Serial.println();
 
-    _mgr->processIncomingMessage(handle, msg);
+    BleIn *inPkt = new BleIn{handle, std::move(msg)};
+    // if the queue is full, you might log or drop:
+    if (xQueueSend(_mgr->_bleRxQueue, &inPkt, pdMS_TO_TICKS(10)) != pdPASS)
+    {
+        delete inPkt;
+        Serial.println("BLE RX queue full, dropping packet");
+    }
 }

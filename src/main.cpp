@@ -142,12 +142,12 @@ void loop()
   uint8_t n = btManager->getServer()->getConnectedCount();
   Serial.printf("Connected count: %u\n", n);
 
-  if (n)
-  {
-    std::string message = "bye";
-    bool ok = btManager->sendBroadcast(message);
-    Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
-  }
+  // if (n)
+  // {
+  //   std::string message = "bye";
+  //   bool ok = btManager->sendBroadcast(message);
+  //   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+  // }
 
   // static unsigned long lastPublishTime = 0;
   // if (millis() - lastPublishTime > 5000)
