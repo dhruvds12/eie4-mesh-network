@@ -39,7 +39,7 @@ NetworkMessageHandler::~NetworkMessageHandler()
     }
 }
 
-bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage, const char *message, uint32_t userID = 0)
+bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage, const char *message, uint32_t userID)
 {
     OutgoingMessage msg;
     msg.destID = destNodeID;

@@ -12,6 +12,7 @@
 #include <set>
 #include <unordered_map>
 #include "userSessionManager.h"
+#include "IClientNotifier.h"
 
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
@@ -80,7 +81,7 @@ public:
      * @param RadioManager
      * @param myNodeID
      */
-    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm);
+    AODVRouter(IRadioManager *RadioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm, IClientNotifier *icm);
 
     /**
      * @brief Initialise and create the router task
@@ -115,6 +116,8 @@ private:
     TaskHandle_t _timerWorkerHandle;
 
     MQTTManager *_mqttManager;
+
+    IClientNotifier *_clientNotifier;
 
     struct Lock
     {

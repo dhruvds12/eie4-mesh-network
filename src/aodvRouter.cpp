@@ -3,8 +3,8 @@
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
-AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm)
-    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm)
+AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm, IClientNotifier *icm)
+    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm), _clientNotifier(icm)
 {
 }
 
@@ -649,19 +649,23 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, actualData, actualDataLen});
         return;
     }
-    
+
     BaseHeader fwd = base;
-    if (dataHeader.finalDestID == BROADCAST_ADDR){
+    if (dataHeader.finalDestID == BROADCAST_ADDR)
+    {
         // TODO: need to stop the broadcast at some point
         Serial.println("[AODVRouter] Entered I am received BROADCAST DATA path");
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, actualData, actualDataLen});
         fwd.destNodeID = BROADCAST_ADDR;
-
-    } else {
+    }
+    else
+    {
         RouteEntry re;
 
         if (!getRoute(dataHeader.finalDestID, re))
@@ -672,7 +676,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
             // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
             return;
         }
-        
+
         fwd.destNodeID = re.nextHop;
     }
 
@@ -778,6 +782,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
+        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, message, messageLen});
         return;
     }
 

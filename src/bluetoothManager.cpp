@@ -17,6 +17,9 @@ BluetoothManager::~BluetoothManager()
 
 void BluetoothManager::init(const std::string &deviceName)
 {
+    _bleTxQueue = xQueueCreate(20, sizeof(BleOut *));
+    xTaskCreate(bleTxWorker, "BLE-TX", 4096, this, tskIDLE_PRIORITY + 1, nullptr);
+
     // Initialize NimBLE with a device name and set it for advertisement.
     NimBLEDevice::init(deviceName);
     NimBLEDevice::setDeviceName(deviceName);
@@ -52,6 +55,30 @@ void BluetoothManager::init(const std::string &deviceName)
     NimBLEAdvertisementData scanResponse;
     scanResponse.setName(deviceName);
     pAdvertising->setScanResponseData(scanResponse);
+}
+
+void BluetoothManager::bleTxWorker(void *pv)
+{
+    auto mgr = static_cast<BluetoothManager *>(pv);
+    BleOut *pkt;
+    for (;;)
+    {
+        if (xQueueReceive(mgr->_bleTxQueue, &pkt, portMAX_DELAY) == pdTRUE)
+        {
+            switch (pkt->type)
+            {
+            case BleType::BLE_UnicastUser:
+                mgr->sendToClient(pkt->connHandle, std::string(pkt->data.begin(), pkt->data.end()));
+                break;
+            case BleType::BLE_Broadcast:
+                mgr->sendBroadcast(std::string(pkt->data.begin(), pkt->data.end()));
+                break;
+            default:
+                break;
+            }
+            delete pkt;
+        }
+    }
 }
 
 void BluetoothManager::startAdvertising()
@@ -96,6 +123,12 @@ bool BluetoothManager::sendToClient(uint16_t connHandle, const std::string &mess
     return pRxCharacteristic->notify(message, connHandle);
 }
 
+bool BluetoothManager::notify(const Outgoing &o)
+{
+    auto pkt = new BleOut{o.type, _userMgr->getBleHandle(o.userID), std::vector<uint8_t>(o.data, o.data + o.length)};
+    return enqueueBleOut(pkt);
+}
+
 /**
  * @brief Procide connection information ie nimble connection info
  *
@@ -132,33 +165,28 @@ void BluetoothManager::removeConnection(const NimBLEConnInfo &connInfo)
 void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::string &msg)
 {
     // Need at least 1 + 4 + 4 = 9 bytes of header
-    if (msg.size() < 9) {
+    if (msg.size() < 9)
+    {
         Serial.println("Incoming BLE packet too short");
         return;
     }
 
-    const uint8_t* data = reinterpret_cast<const uint8_t*>(msg.data());
+    const uint8_t *data = reinterpret_cast<const uint8_t *>(msg.data());
 
     // parse little-endian
-    uint8_t  raw  = data[0];
+    uint8_t raw = data[0];
     auto type = static_cast<BLEMessageType>(raw);
 
-    uint32_t dest = uint32_t(data[1])
-                   | (uint32_t(data[2]) << 8)
-                   | (uint32_t(data[3]) << 16)
-                   | (uint32_t(data[4]) << 24);
-    uint32_t sender = uint32_t(data[5])
-                   | (uint32_t(data[6]) << 8)
-                   | (uint32_t(data[7]) << 16)
-                   | (uint32_t(data[8]) << 24);
+    uint32_t dest = uint32_t(data[1]) | (uint32_t(data[2]) << 8) | (uint32_t(data[3]) << 16) | (uint32_t(data[4]) << 24);
+    uint32_t sender = uint32_t(data[5]) | (uint32_t(data[6]) << 8) | (uint32_t(data[7]) << 16) | (uint32_t(data[8]) << 24);
 
     // remaining bytes are the UTF-8 payload
     std::string body;
-    if (msg.size() > 9) {
-        body.assign(reinterpret_cast<const char*>(data + 9),
+    if (msg.size() > 9)
+    {
+        body.assign(reinterpret_cast<const char *>(data + 9),
                     msg.size() - 9);
     }
-
 
     switch (type)
     {
@@ -168,24 +196,24 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     }
     break;
 
-    // case LIST_NODES_REQ:
-    // {
-    //     // You’ll need a way to ask the router for its known node IDs:
-    //     auto nodes = _router->getKnownNodeIDs();
-    //     auto resp = encodeListResponse(LIST_NODES_RESP, nodes);
-    //     sendToClient(connHandle, resp);
-    // }
-    // break;
+        // case LIST_NODES_REQ:
+        // {
+        //     // You’ll need a way to ask the router for its known node IDs:
+        //     auto nodes = _router->getKnownNodeIDs();
+        //     auto resp = encodeListResponse(LIST_NODES_RESP, nodes);
+        //     sendToClient(connHandle, resp);
+        // }
+        // break;
 
-    // case LIST_USERS_REQ:
-    // {
-    //     auto users = _userMgr->allUsers()
-    //                      .filter(u→u.isConnected)
-    //                      .map(u→u.userID);
-    //     auto resp = encodeListResponse(LIST_USERS_RESP, users);
-    //     sendToClient(connHandle, resp);
-    // }
-    // break;
+        // case LIST_USERS_REQ:
+        // {
+        //     auto users = _userMgr->allUsers()
+        //                      .filter(u→u.isConnected)
+        //                      .map(u→u.userID);
+        //     auto resp = encodeListResponse(LIST_USERS_RESP, users);
+        //     sendToClient(connHandle, resp);
+        // }
+        // break;
 
     case NODE_MSG:
         // destA = target nodeID
@@ -205,7 +233,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     break;
 
     default:
-      
+
         break;
     }
 }
