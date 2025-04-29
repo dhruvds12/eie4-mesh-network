@@ -1,5 +1,6 @@
 #include "NetworkMessageHandler.h"
 #include <cstdio>
+#include <Arduino.h>
 
 // Constants for queue and task configuration.
 #define QUEUE_LENGTH 10
@@ -44,6 +45,7 @@ bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage
     OutgoingMessage msg;
     msg.destID = destNodeID;
     msg.userMessage = userMessage;
+    msg.userID = userID;
     // Safely copy the message into the fixed-size buffer.
     strncpy(msg.message, message, sizeof(msg.message) - 1);
     msg.message[sizeof(msg.message) - 1] = '\0';
@@ -78,6 +80,7 @@ void NetworkMessageHandler::processQueue()
             }
             else
             {
+                Serial.printf("Sending user message from %u, to %u\n", msg.userID, msg.destID);
                 _router->sendUserMessage(msg.userID, msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message));
             }
         }

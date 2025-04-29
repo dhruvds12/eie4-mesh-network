@@ -109,6 +109,7 @@ private:
         LIST_USERS_REQ = 0x06,
         LIST_NODE_RESP = 0x07,
         LIST_USERS_RESP = 0x08,
+        USER_MSG_ACCEPTED = 0x09
     };
 
     

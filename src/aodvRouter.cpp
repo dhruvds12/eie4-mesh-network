@@ -54,7 +54,7 @@ bool AODVRouter::begin()
     */
     _broadcastTimer = xTimerCreate(
         "BroadcastTimer",
-        pdMS_TO_TICKS(900000),   // 900000ms = 15 minute
+        pdMS_TO_TICKS(60000),    // 900000ms = 15 minute
         pdTRUE,                  // Auto-reload for periodic execution
         (void *)this,            // Pass the current router instance as timer ID
         broadcastTimerCallback); // Callback to send broadcast info
@@ -208,6 +208,7 @@ void AODVRouter::sendBroadcastInfo()
             idxR += numR;
         }
     }
+    Serial.println("Send broadcastInfo");
 }
 
 void AODVRouter::cleanupAckBuffer()
@@ -339,6 +340,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 
 void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *message, size_t len)
 {
+    Serial.printf("Creating user message to %u from %u\n", toUserID, fromUserID);
     // check GUT
     GutEntry ge;
     if (!getGutEntry(toUserID, ge))
@@ -387,10 +389,16 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
     bh.hopCount = 0;
     bh.reserved = 0;
 
-    UserMsgHeader umh;
+    UserMsgHeader umh{};
     umh.fromUserID = fromUserID;
-    umh.toNodeID = toUserID;
+    umh.toUserID = toUserID;
     umh.toNodeID = ge.nodeID;
+
+    Serial.printf(
+        "Creating user to user message: from user %u to user %u (node %u)\n",
+        umh.fromUserID,
+        umh.toUserID,
+        umh.toNodeID);
 
     transmitPacket(bh, (uint8_t *)&umh, sizeof(UserMsgHeader), message, len);
 }
@@ -674,7 +682,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0,0, actualData, actualDataLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen});
         fwd.destNodeID = BROADCAST_ADDR;
     }
     else
@@ -795,7 +803,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
-        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID,message, messageLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
         return;
     }
 

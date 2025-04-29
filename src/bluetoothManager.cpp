@@ -89,6 +89,7 @@ void BluetoothManager::bleTxWorker(void *pv)
             switch (pkt->type)
             {
             case BleType::BLE_UnicastUser:
+                Serial.printf("Received user_msg from %u, to %u\n", pkt->from, pkt->to);
                 raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
@@ -225,6 +226,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
     case USER_ID_UPDATE:
     {
+        Serial.printf("Received user_ID_UPDATE for %u with connHandle %u\n", sender, connHandle);
         _userMgr->addOrRefresh(sender, connHandle);
     }
     break;
@@ -262,12 +264,22 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case NODE_MSG:
         // destA = target nodeID
+        Serial.printf("Node_msg for %u from %u\n", dest, sender);
         _netHandler->enqueueMessage(dest, false, body.c_str());
         break;
 
     case USER_MSG:
     {
-        _netHandler->enqueueMessage(dest, false, body.c_str(), sender);
+        Serial.printf("Received user_msg from %u to %u\n", sender, dest);
+        if (_userMgr->knowsUser(sender))
+        {
+
+            _netHandler->enqueueMessage(dest, true, body.c_str(), sender);
+        }
+        else
+        {
+            Serial.println("Did not recognise sender");
+        }
     }
     break;
 
