@@ -37,10 +37,10 @@ DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
 UserSessionManager userSessionManager;
-BluetoothManager btManager(&userSessionManager);
 MQTTManager *mqttManager = nullptr;
-AODVRouter aodvRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager);
-NetworkMessageHandler networkMessageHandler(&aodvRouter);
+BluetoothManager *btManager = nullptr;
+AODVRouter *aodvRouter = nullptr;
+NetworkMessageHandler *networkMessageHandler = nullptr;
 
 void VextON(void)
 {
@@ -57,6 +57,13 @@ void VextOFF(void)
 
 void setup()
 {
+  btManager = new BluetoothManager(&userSessionManager, nullptr);
+  aodvRouter = new AODVRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager, btManager);
+  networkMessageHandler = new NetworkMessageHandler(aodvRouter);
+
+  btManager->setNetworkMessageHandler(networkMessageHandler);
+  delay(100);
+
   Serial.begin(115200);
   Serial.print("ESP-IDF Version: ");
   Serial.println(esp_get_idf_version());
@@ -79,7 +86,7 @@ void setup()
   bool wifiConnected = wifiConnect(ssid, password);
 
   // Create the MQTTManager instance with the dynamically built subscribe topic.
-  mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", getNodeID(), &radioManager, &networkMessageHandler);
+  mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", getNodeID(), &radioManager, networkMessageHandler);
 
   // If WiFi isn't connected, then do not continue with MQTT/HTTP initialization.
   if (!wifiConnected)
@@ -91,12 +98,12 @@ void setup()
   {
     // add logic for mqtt client setup here....
     mqttManager->begin();
-    aodvRouter.setMQTTManager(mqttManager);
+    aodvRouter->setMQTTManager(mqttManager);
   }
 
   // Initialize BLE using our abstraction.
-  btManager.init("HeltecNode");
-  btManager.startAdvertising();
+  btManager->init("HeltecNode2");
+  btManager->startAdvertising();
   Serial.println("NimBLE advertising started...");
 
   if (!radioManager.begin())
@@ -109,7 +116,7 @@ void setup()
   }
 
   // Start the AODV router
-  if (!aodvRouter.begin())
+  if (!aodvRouter->begin())
   {
     Serial.println("AODV Router initialization failed!");
     while (1)
@@ -130,15 +137,17 @@ void setup()
 void loop()
 {
 
-  delay(1000);
+  delay(10000);
   // Example: print the number of connected clients.
-  uint8_t n = btManager.getServer()->getConnectedCount();
+  uint8_t n = btManager->getServer()->getConnectedCount();
   Serial.printf("Connected count: %u\n", n);
 
-  if (n) {
-      bool ok = btManager.sendBroadcast("hello");
-      Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
-  }
+  // if (n)
+  // {
+  //   std::string message = "bye";
+  //   bool ok = btManager->sendBroadcast(message);
+  //   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+  // }
 
   // static unsigned long lastPublishTime = 0;
   // if (millis() - lastPublishTime > 5000)

@@ -3,8 +3,8 @@
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
-AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm)
-    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm)
+AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm, IClientNotifier *icm)
+    : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm), _clientNotifier(icm)
 {
 }
 
@@ -54,7 +54,7 @@ bool AODVRouter::begin()
     */
     _broadcastTimer = xTimerCreate(
         "BroadcastTimer",
-        pdMS_TO_TICKS(3600000),  // 3600000ms = 1 hour
+        pdMS_TO_TICKS(60000),    // 900000ms = 15 minute
         pdTRUE,                  // Auto-reload for periodic execution
         (void *)this,            // Pass the current router instance as timer ID
         broadcastTimerCallback); // Callback to send broadcast info
@@ -157,44 +157,58 @@ void AODVRouter::sendBroadcastInfo()
     constexpr size_t IDS_PER_PKT = SPACE / sizeof(uint32_t);
 
     size_t idxA = 0, idxR = 0;
-    while (idxA < added.size() || idxR < removed.size())
+    if (added.empty() && removed.empty())
     {
-
-        size_t numA = std::min(IDS_PER_PKT, added.size() - idxA);
-        size_t remaining = IDS_PER_PKT - numA;
-        size_t numR = remaining == 0 ? 0 : std::min(remaining, removed.size() - idxR);
-
         DiffBroadcastInfoHeader dh;
-        dh.numAdded = uint16_t(numA);
-        dh.numRemoved = uint16_t(numR);
+        dh.numAdded = 0;
+        dh.numRemoved = 0;
         dh.originNodeID = _myNodeID;
 
-        std::vector<uint8_t> payload;
-        payload.reserve((numA + numR) * sizeof(uint32_t));
-
-        // first the added IDs
-        for (size_t i = 0; i < numA; ++i)
-        {
-            uint32_t uid = added[idxA + i];
-            auto p = reinterpret_cast<const uint8_t *>(&uid);
-            payload.insert(payload.end(), p, p + sizeof(uid));
-        }
-        // then the removed IDs
-        for (size_t i = 0; i < numR; ++i)
-        {
-            uint32_t uid = removed[idxR + i];
-            auto p = reinterpret_cast<const uint8_t *>(&uid);
-            payload.insert(payload.end(), p, p + sizeof(uid));
-        }
-
-        transmitPacket(
-            bh,
-            reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR,
-            payload.data(), payload.size());
-
-        idxA += numA;
-        idxR += numR;
+        transmitPacket(bh, reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR);
     }
+    else
+    {
+
+        while (idxA < added.size() || idxR < removed.size())
+        {
+
+            size_t numA = std::min(IDS_PER_PKT, added.size() - idxA);
+            size_t remaining = IDS_PER_PKT - numA;
+            size_t numR = remaining == 0 ? 0 : std::min(remaining, removed.size() - idxR);
+
+            DiffBroadcastInfoHeader dh;
+            dh.numAdded = uint16_t(numA);
+            dh.numRemoved = uint16_t(numR);
+            dh.originNodeID = _myNodeID;
+
+            std::vector<uint8_t> payload;
+            payload.reserve((numA + numR) * sizeof(uint32_t));
+
+            // first the added IDs
+            for (size_t i = 0; i < numA; ++i)
+            {
+                uint32_t uid = added[idxA + i];
+                auto p = reinterpret_cast<const uint8_t *>(&uid);
+                payload.insert(payload.end(), p, p + sizeof(uid));
+            }
+            // then the removed IDs
+            for (size_t i = 0; i < numR; ++i)
+            {
+                uint32_t uid = removed[idxR + i];
+                auto p = reinterpret_cast<const uint8_t *>(&uid);
+                payload.insert(payload.end(), p, p + sizeof(uid));
+            }
+
+            transmitPacket(
+                bh,
+                reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR,
+                payload.data(), payload.size());
+
+            idxA += numA;
+            idxR += numR;
+        }
+    }
+    Serial.println("Send broadcastInfo");
 }
 
 void AODVRouter::cleanupAckBuffer()
@@ -282,29 +296,35 @@ void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 
 void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 {
+    BaseHeader bh;
     RouteEntry re;
-
-    if (!getRoute(destNodeID, re))
+    if (destNodeID != BROADCAST_ADDR)
     {
-        Serial.printf("[AODVRouter] No route for %u, sending RREQ.\n", destNodeID);
-
-        uint8_t *copy = (uint8_t *)pvPortMalloc(len);
-        if (copy)
+        if (!getRoute(destNodeID, re))
         {
-            memcpy(copy, data, len);
-            insertDataBuffer(destNodeID, copy, len);
-        }
-        else
-        {
-            Serial.println("[AODVRouter] Memory allocation failed for data buffer");
-        }
+            Serial.printf("[AODVRouter] No route for %u, sending RREQ.\n", destNodeID);
 
-        sendRREQ(destNodeID);
-        return;
+            uint8_t *copy = (uint8_t *)pvPortMalloc(len);
+            if (copy)
+            {
+                memcpy(copy, data, len);
+                insertDataBuffer(destNodeID, copy, len);
+            }
+            else
+            {
+                Serial.println("[AODVRouter] Memory allocation failed for data buffer");
+            }
+
+            sendRREQ(destNodeID);
+            return;
+        }
+        bh.destNodeID = re.nextHop;
+    }
+    else
+    {
+        bh.destNodeID = BROADCAST_ADDR;
     }
 
-    BaseHeader bh;
-    bh.destNodeID = re.nextHop;
     bh.srcNodeID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_DATA;
@@ -320,6 +340,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
 
 void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *message, size_t len)
 {
+    Serial.printf("Creating user message to %u from %u\n", toUserID, fromUserID);
     // check GUT
     GutEntry ge;
     if (!getGutEntry(toUserID, ge))
@@ -368,10 +389,16 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
     bh.hopCount = 0;
     bh.reserved = 0;
 
-    UserMsgHeader umh;
+    UserMsgHeader umh{};
     umh.fromUserID = fromUserID;
-    umh.toNodeID = toUserID;
+    umh.toUserID = toUserID;
     umh.toNodeID = ge.nodeID;
+
+    Serial.printf(
+        "Creating user to user message: from user %u to user %u (node %u)\n",
+        umh.fromUserID,
+        umh.toUserID,
+        umh.toNodeID);
 
     transmitPacket(bh, (uint8_t *)&umh, sizeof(UserMsgHeader), message, len);
 }
@@ -643,23 +670,39 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.srcNodeID, actualData, actualDataLen});
         return;
     }
-
-    RouteEntry re;
-
-    if (!getRoute(dataHeader.finalDestID, re))
-    {
-        Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
-        // special case where node self reports broken link therefore brokenNodeID == originNodeID
-        sendRERR(_myNodeID, base.srcNodeID, dataHeader.finalDestID, base.packetID);
-        // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
-        return;
-    }
-    Serial.println("[AODVRouter] Forwading Data");
 
     BaseHeader fwd = base;
-    fwd.destNodeID = re.nextHop;
+    if (dataHeader.finalDestID == BROADCAST_ADDR)
+    {
+        // TODO: need to stop the broadcast at some point
+        Serial.println("[AODVRouter] Entered I am received BROADCAST DATA path");
+        // TODO: need to properly extract the data without the header
+        Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
+        Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen});
+        fwd.destNodeID = BROADCAST_ADDR;
+    }
+    else
+    {
+        RouteEntry re;
+
+        if (!getRoute(dataHeader.finalDestID, re))
+        {
+            Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
+            // special case where node self reports broken link therefore brokenNodeID == originNodeID
+            sendRERR(_myNodeID, base.srcNodeID, dataHeader.finalDestID, base.packetID);
+            // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
+            return;
+        }
+
+        fwd.destNodeID = re.nextHop;
+    }
+
+    Serial.println("[AODVRouter] Forwading Data");
+
     fwd.hopCount++;
     fwd.packetType = PKT_DATA;
     // we don't change src node in data message because we should not be learning
@@ -760,6 +803,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
+        _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
         return;
     }
 
@@ -780,7 +824,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     fwd.hopCount++;
     fwd.packetType = PKT_USER_MSG;
 
-    transmitPacket(base, (uint8_t *)&umh, sizeof(UserMsgHeader), message, messageLen);
+    transmitPacket(fwd, (uint8_t *)&umh, sizeof(UserMsgHeader), message, messageLen);
 }
 
 void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
@@ -987,7 +1031,7 @@ void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t u
     bh.destNodeID = nextHop;
     bh.srcNodeID = _myNodeID;
     bh.packetID = esp_random();
-    bh.packetType = PKT_RREP;
+    bh.packetType = PKT_UREP;
     bh.flags = 0;
     bh.hopCount = 0;
     bh.reserved = 0;
@@ -1008,14 +1052,14 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
     bh.destNodeID = nextHop; // or unicast to original sender
     bh.srcNodeID = _myNodeID;
     bh.packetID = esp_random();
-    bh.packetType = PKT_RERR;
+    bh.packetType = PKT_UERR;
     bh.flags = 0;
     bh.hopCount = 0;
     bh.reserved = 0;
 
     UERRHeader uerr;
     uerr.nodeID = nodeID;
-    uerr.originNodeID = originalPacketID;
+    uerr.originalPacketID = originalPacketID;
     uerr.originNodeID = originNodeID;
     uerr.userID = userID;
 
@@ -1355,6 +1399,27 @@ void AODVRouter::removeItemRoutingTable(uint32_t id)
 {
     Lock l(_mutex);
     _routeTable.erase(id);
+}
+
+// AODVRouter.cpp (inside class AODVRouter)
+
+std::vector<uint32_t> AODVRouter::getKnownNodeIDs() const
+{
+    Lock l(_mutex);
+    return std::vector<uint32_t>(discoveredNodes.begin(),
+                                 discoveredNodes.end());
+}
+
+std::vector<uint32_t> AODVRouter::getKnownUserIDs() const
+{
+    Lock l(_mutex);
+    std::vector<uint32_t> users;
+    users.reserve(_gut.size());
+    for (auto &kv : _gut)
+    {
+        users.push_back(kv.first);
+    }
+    return users;
 }
 
 /*

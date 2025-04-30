@@ -34,6 +34,7 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
         _diffAdded.insert(userID);
     }
     writeUnlock();
+    Serial.printf("Added new user %u\n", userID);
 }
 
 void UserSessionManager::remove(uint32_t userID)

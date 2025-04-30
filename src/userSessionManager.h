@@ -95,6 +95,8 @@ private:
     }
 
     std::map<uint32_t, UserInfo> _users;
+
+    std::map<uint16_t, uint32_t> _connHandleUserMap;
 };
 
 #endif
