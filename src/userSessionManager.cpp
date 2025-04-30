@@ -1,7 +1,7 @@
 #include "userSessionManager.h"
 
-UserSessionManager::UserSessionManager()
-    : _readCount(0)
+UserSessionManager::UserSessionManager(MQTTManager *MQTTManager)
+    : _readCount(0), _mqttManager(MQTTManager)
 {
     _readCountMutex = xSemaphoreCreateMutex();
     _writeMutex = xSemaphoreCreateMutex();
@@ -34,6 +34,9 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
         _diffAdded.insert(userID);
     }
     writeUnlock();
+    if(_mqttManager != nullptr) {
+        _mqttManager->publishUserAdded(userID);
+    }
     Serial.printf("Added new user %u\n", userID);
 }
 

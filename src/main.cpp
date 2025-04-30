@@ -36,11 +36,11 @@ uint32_t getNodeID()
 DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
-UserSessionManager userSessionManager;
 MQTTManager *mqttManager = nullptr;
 BluetoothManager *btManager = nullptr;
 AODVRouter *aodvRouter = nullptr;
 NetworkMessageHandler *networkMessageHandler = nullptr;
+UserSessionManager userSessionManager(mqttManager);
 
 void VextON(void)
 {
@@ -99,6 +99,7 @@ void setup()
     // add logic for mqtt client setup here....
     mqttManager->begin();
     aodvRouter->setMQTTManager(mqttManager);
+    userSessionManager.setMQTTManager(mqttManager);
   }
 
   // Initialize BLE using our abstraction.
