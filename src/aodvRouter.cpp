@@ -824,7 +824,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     fwd.hopCount++;
     fwd.packetType = PKT_USER_MSG;
 
-    transmitPacket(base, (uint8_t *)&umh, sizeof(UserMsgHeader), message, messageLen);
+    transmitPacket(fwd, (uint8_t *)&umh, sizeof(UserMsgHeader), message, messageLen);
 }
 
 void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)
