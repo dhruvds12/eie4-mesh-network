@@ -1031,7 +1031,7 @@ void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t u
     bh.destNodeID = nextHop;
     bh.srcNodeID = _myNodeID;
     bh.packetID = esp_random();
-    bh.packetType = PKT_RREP;
+    bh.packetType = PKT_UREP;
     bh.flags = 0;
     bh.hopCount = 0;
     bh.reserved = 0;
@@ -1052,7 +1052,7 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
     bh.destNodeID = nextHop; // or unicast to original sender
     bh.srcNodeID = _myNodeID;
     bh.packetID = esp_random();
-    bh.packetType = PKT_RERR;
+    bh.packetType = PKT_UERR;
     bh.flags = 0;
     bh.hopCount = 0;
     bh.reserved = 0;
