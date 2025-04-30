@@ -1059,7 +1059,7 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
 
     UERRHeader uerr;
     uerr.nodeID = nodeID;
-    uerr.originNodeID = originalPacketID;
+    uerr.originalPacketID = originalPacketID;
     uerr.originNodeID = originNodeID;
     uerr.userID = userID;
 
