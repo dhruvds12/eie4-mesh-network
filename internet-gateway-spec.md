@@ -32,7 +32,7 @@
  └─────────────┘
 ```
 *All persistent data lives in Firestore; the Go service only needs disk for a write‑ahead‑log (WAL) that shields you from transient outages.*
-
+*JWT verification done through Firebase Admin SDK --> dropped from API due to overhead to verify each user and gateway during testing.*
 
 ## 1 System components
 
