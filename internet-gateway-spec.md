@@ -33,6 +33,7 @@
 ```
 *All persistent data lives in Firestore; the Go service only needs disk for a write‑ahead‑log (WAL) that shields you from transient outages.*
 
+
 ## 1 System components
 
 | Tag    | Component                    | Technology                                   | Free-tier fit                         |
@@ -40,9 +41,9 @@
 | APP    | Android (and optional Web) client | Kotlin / Flutter; Firebase Auth Anonymous     | Unlimited sign-ins                    |
 | NODE   | LoRa mesh node               | existing C / Arduino code                    | —                                     |
 | GW     | Gateway firmware             | ESP32 + ArduinoWiFi + mbedTLS                | fits 4 MB flash                       |
-| API    | Backend REST service         | FastAPI + uvicorn (Python 3.12)              | 1 vCPU, 1 GB Oracle                   |
+| API    | Backend REST service         | GO             | 1 vCPU, 1 GB Oracle                   |
 | DB     | Database                     | Cloud Firestore (Spark)                      | 50 k reads / 20 k writes per day      |
-| QUEUE  | Memory buffer in API         | asyncio.Queue + on-disk WAL                  | absorbs outages                       |
+| QUEUE  | Memory buffer in API         | ________                  | absorbs outages                       |
 
 ---
 
