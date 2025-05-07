@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 
-enum class BleType : uint8_t { BLE_Broadcast, BLE_UnicastUser, BLE_Node, BLE_List_Users, BLE_List_Nodes };
+enum class BleType : uint8_t { BLE_Broadcast, BLE_UnicastUser, BLE_Node, BLE_List_Users, BLE_List_Nodes, BLE_GATEWAY };
 
 struct Outgoing
 {

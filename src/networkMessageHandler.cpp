@@ -40,9 +40,10 @@ NetworkMessageHandler::~NetworkMessageHandler()
     }
 }
 
-bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage, const char *message, uint32_t userID)
+bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage, const char *message, uint32_t userID, uint8_t flags)
 {
     OutgoingMessage msg;
+    msg.flags = flags;
     msg.destID = destNodeID;
     msg.userMessage = userMessage;
     msg.userID = userID;
@@ -74,14 +75,12 @@ void NetworkMessageHandler::processQueue()
             if (!msg.userMessage)
             {
                 // Send the message using the injected router.
-                _router->sendData(msg.destID,
-                                  reinterpret_cast<const uint8_t *>(msg.message),
-                                  strlen(msg.message));
+                _router->sendData(msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message));
             }
             else
             {
                 Serial.printf("Sending user message from %u, to %u\n", msg.userID, msg.destID);
-                _router->sendUserMessage(msg.userID, msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message));
+                _router->sendUserMessage(msg.userID, msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message), msg.flags);
             }
         }
     }

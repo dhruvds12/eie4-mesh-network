@@ -18,10 +18,18 @@ enum PacketType : uint8_t
     PKT_BROADCAST = 0x05,
     PKT_BROADCAST_INFO = 0x06,
     PKT_ACK = 0x07,
+    PKT_GATEWAY = 0x08,
+    // .......
     PKT_UREQ = 0x0F,
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
+
+};
+
+enum flags : uint8_t
+{
+    GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;

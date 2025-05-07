@@ -93,6 +93,10 @@ void BluetoothManager::bleTxWorker(void *pv)
                 raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
+            case BleType::BLE_GATEWAY:
+                Serial.printf("Received Gateway mess from %u, to %u\n", pkt->from, pkt->to);
+                raw = encodeMessage(USER_MSG_GATEWAY, pkt->to, pkt->from,pkt->data);
+                mgr->sendToClient(pkt->connHandle, raw);
             case BleType::BLE_Node:
                 raw = encodeMessage(NODE_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendBroadcast(raw);
@@ -288,6 +292,20 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         _netHandler->enqueueMessage(BROADCAST_ADDR, false, body.c_str());
     }
     break;
+
+    case USER_MSG_GATEWAY:
+    {
+        Serial.printf("Received user_msg from %u to %u\n", sender, dest);
+        if (_userMgr->knowsUser(sender))
+        {
+
+            _netHandler->enqueueMessage(dest, true, body.c_str(), sender, GATEWAY);
+        }
+        else
+        {
+            Serial.println("Did not recognise sender");
+        }
+    }
 
     default:
 

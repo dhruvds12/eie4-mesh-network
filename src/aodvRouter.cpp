@@ -294,7 +294,7 @@ void AODVRouter::ackCleanupCallback(TimerHandle_t xTimer)
 }
 #endif
 
-void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
+void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags)
 {
     BaseHeader bh;
     RouteEntry re;
@@ -328,7 +328,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
     bh.srcNodeID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_DATA;
-    bh.flags = 0; // No flags set ie no ACK etc expected
+    bh.flags = flags; // No flags set ie no ACK etc expected
     bh.hopCount = 0;
     bh.reserved = 0;
 
@@ -338,7 +338,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len)
     transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), data, len);
 }
 
-void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *message, size_t len)
+void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *message, size_t len, uint8_t flags)
 {
     Serial.printf("Creating user message to %u from %u\n", toUserID, fromUserID);
     // check GUT

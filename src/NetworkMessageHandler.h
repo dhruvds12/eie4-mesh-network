@@ -12,6 +12,7 @@
 // Structure to hold outgoing messages for transmission.
 struct OutgoingMessage
 {
+    uint8_t flags;
     uint32_t destID; // can be userID or nodeID depending on the bool
     uint32_t userID;
     bool userMessage;
@@ -26,7 +27,18 @@ public:
     ~NetworkMessageHandler();
 
     // Enqueue a message for transmission.
-    bool enqueueMessage(uint32_t destID, bool userMessage, const char *message, uint32_t userID = 0);
+    /**
+     * @brief 
+     * 
+     * @param destID 
+     * @param userMessage 
+     * @param message 
+     * @param userID -> optional
+     * @param flags -> optional
+     * @return true 
+     * @return false 
+     */
+    bool enqueueMessage(uint32_t destID, bool userMessage, const char *message, uint32_t userID = 0, uint8_t flags = 0);
 
     std::vector<uint32_t> getKnownNodes() const
     {

@@ -100,9 +100,9 @@ public:
      * @param len The length of the raw data
      */
 
-    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
+    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags=0);
 
-    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len);
+    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags=0);
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
