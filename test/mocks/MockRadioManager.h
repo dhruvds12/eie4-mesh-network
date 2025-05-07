@@ -40,12 +40,13 @@ public:
         return false;
     }
 
-    void enqueueRxPacket(const uint8_t *data, size_t len)
+    bool enqueueRxPacket(const uint8_t *data, size_t len)
     {
         RadioPacket p;
         memcpy(p.data, data, len);
         p.len = len;
         rxQueue.push(p);
+        return true; // TEMP FIX?? 
     }
 
 private:
