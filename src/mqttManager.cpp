@@ -293,7 +293,7 @@ void MQTTManager::processMessage(const mqtt_message_t &msg)
         }
         uint32_t dest = doc["destination"];
         const char *mt = doc["message"];
-        if (!_networkHandler->enqueueMessage(dest, false, mt))
+        if (!_networkHandler->enqueueMessage(MsgKind::NODE, dest, mt))
         {
             Serial.println("Failed to enqueue network message");
         }

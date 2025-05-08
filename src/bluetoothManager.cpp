@@ -269,7 +269,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case NODE_MSG:
         // destA = target nodeID
         Serial.printf("Node_msg for %u from %u\n", dest, sender);
-        _netHandler->enqueueMessage(dest, false, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, dest, body.c_str());
         break;
 
     case USER_MSG:
@@ -278,7 +278,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(dest, true, body.c_str(), sender);
+            _netHandler->enqueueMessage(MsgKind::USER, dest, body.c_str(), sender);
         }
         else
         {
@@ -289,7 +289,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BROADCAST:
     {
-        _netHandler->enqueueMessage(BROADCAST_ADDR, false, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, body.c_str());
     }
     break;
 
@@ -299,7 +299,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(dest, true, body.c_str(), sender, GATEWAY);
+            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY ,dest, body.c_str(), sender, TO_GATEWAY);
         }
         else
         {

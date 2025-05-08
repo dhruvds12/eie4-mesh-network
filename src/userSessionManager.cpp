@@ -1,7 +1,8 @@
 #include "userSessionManager.h"
+#include "mqttmanager.h"
 
-UserSessionManager::UserSessionManager(MQTTManager *MQTTManager)
-    : _readCount(0), _mqttManager(MQTTManager)
+UserSessionManager::UserSessionManager(MQTTManager *mqttManager)
+    : _readCount(0), _mqttManager(mqttManager)
 {
     _readCountMutex = xSemaphoreCreateMutex();
     _writeMutex = xSemaphoreCreateMutex();

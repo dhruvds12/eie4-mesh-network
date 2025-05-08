@@ -1,6 +1,7 @@
 #include "NetworkMessageHandler.h"
 #include <cstdio>
 #include <Arduino.h>
+#include "gatewayManager.h"
 
 // Constants for queue and task configuration.
 #define QUEUE_LENGTH 10
@@ -40,12 +41,12 @@ NetworkMessageHandler::~NetworkMessageHandler()
     }
 }
 
-bool NetworkMessageHandler::enqueueMessage(uint32_t destNodeID, bool userMessage, const char *message, uint32_t userID, uint8_t flags)
+bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destNodeID, const char *message, uint32_t userID, uint8_t flags)
 {
     OutgoingMessage msg;
     msg.flags = flags;
     msg.destID = destNodeID;
-    msg.userMessage = userMessage;
+    msg.kind = kind;
     msg.userID = userID;
     // Safely copy the message into the fixed-size buffer.
     strncpy(msg.message, message, sizeof(msg.message) - 1);
@@ -72,15 +73,26 @@ void NetworkMessageHandler::processQueue()
         // Wait indefinitely for a message from the queue.
         if (xQueueReceive(_sendQueue, &msg, portMAX_DELAY) == pdTRUE)
         {
-            if (!msg.userMessage)
+            if (msg.kind == MsgKind::NODE)
             {
-                // Send the message using the injected router.
-                _router->sendData(msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message));
+                _router->sendData(msg.destID,
+                                  reinterpret_cast<const uint8_t *>(msg.message),
+                                  strlen(msg.message),
+                                  msg.flags);
             }
-            else
+            else if (msg.kind == MsgKind::USER ||
+                     msg.kind == MsgKind::FROM_GATEWAY)
             {
-                Serial.printf("Sending user message from %u, to %u\n", msg.userID, msg.destID);
-                _router->sendUserMessage(msg.userID, msg.destID, reinterpret_cast<const uint8_t *>(msg.message), strlen(msg.message), msg.flags);
+                _router->sendUserMessage(msg.userID,
+                                         msg.destID,
+                                         reinterpret_cast<const uint8_t *>(msg.message),
+                                         strlen(msg.message),
+                                         msg.flags);
+            }
+            else if (msg.kind == MsgKind::TO_GATEWAY && _gwMgr)
+            {
+                // forward to GatewayManager queue – never touches the radio here
+                _gwMgr->uplink(msg.userID, msg.destID, msg.message);
             }
         }
     }

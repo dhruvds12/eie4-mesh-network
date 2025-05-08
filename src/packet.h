@@ -18,7 +18,7 @@ enum PacketType : uint8_t
     PKT_BROADCAST = 0x05,
     PKT_BROADCAST_INFO = 0x06,
     PKT_ACK = 0x07,
-    PKT_GATEWAY = 0x08,
+    PKT_GATEWAY = 0x08, // Used to inform nodes that I have now got internet connection
     // .......
     PKT_UREQ = 0x0F,
     PKT_UREP = 0x10,
@@ -29,7 +29,8 @@ enum PacketType : uint8_t
 
 enum flags : uint8_t
 {
-    GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
+    FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
+    TO_GATEWAY = 0x02,
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;

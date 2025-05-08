@@ -8,9 +8,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "set"
-#include "mqttmanager.h"
 
-
+class MQTTManager;
 
 // Special value indicating no active BLE connection
 static const uint16_t INVALID_HANDLE = 0xFFFF;
@@ -43,7 +42,7 @@ struct UserInfo
 class UserSessionManager
 {
 public:
-    UserSessionManager(MQTTManager *MQTTManager);
+    UserSessionManager(MQTTManager *mqttManager);
     ~UserSessionManager();
     // Register or refresh a user's session on BLE connect/auth
     // Could block on mutex!! - need to handle this
