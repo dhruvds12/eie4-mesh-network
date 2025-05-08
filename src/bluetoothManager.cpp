@@ -2,8 +2,8 @@
 #include <NimBLEDevice.h>
 #include "packet.h"
 
-BluetoothManager::BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler)
-    : pServer(nullptr), pService(nullptr), pAdvertising(nullptr), _userMgr(sessionMgr), _netHandler(networkHandler), _serverCallbacks(nullptr), _txCallbacks(nullptr), _rxCallbacks(nullptr), pTxCharacteristic(nullptr), pRxCharacteristic(nullptr)
+BluetoothManager::BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler, uint32_t nodeID)
+    : pServer(nullptr), pService(nullptr), pAdvertising(nullptr), _userMgr(sessionMgr), _netHandler(networkHandler), _serverCallbacks(nullptr), _txCallbacks(nullptr), _rxCallbacks(nullptr), pTxCharacteristic(nullptr), pRxCharacteristic(nullptr), _nodeID(nodeID)
 {
     _connectedDevicesMutex = xSemaphoreCreateMutex();
 }
@@ -93,10 +93,23 @@ void BluetoothManager::bleTxWorker(void *pv)
                 raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
-            case BleType::BLE_GATEWAY:
-                Serial.printf("Received Gateway mess from %u, to %u\n", pkt->from, pkt->to);
-                raw = encodeMessage(USER_MSG_GATEWAY, pkt->to, pkt->from,pkt->data);
+            case BleType::BLE_USER_GATEWAY:
+                Serial.printf("Received Gateway msg from %u, to %u\n", pkt->from, pkt->to);
+                raw = encodeMessage(USER_MSG_GATEWAY, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
+                break;
+            case BleType::BLE_GATEWAY:
+            {
+                Serial.printf("Received ble gateway announcement, gatway is ....");
+                bool online = !pkt->data.empty() && pkt->data[0];
+                uint8_t b = online ? GATEWAY_AVAILABLE
+                                   : GATEWAY_OFFLINE;
+
+                raw = encodeMessage(static_cast<BLEMessageType>(b),
+                                    0, pkt->from, pkt->data);
+                mgr->sendToClient(pkt->connHandle, raw);
+                break;
+            }
             case BleType::BLE_Node:
                 raw = encodeMessage(NODE_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendBroadcast(raw);
@@ -299,7 +312,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY ,dest, body.c_str(), sender, TO_GATEWAY);
+            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, body.c_str(), sender, TO_GATEWAY);
         }
         else
         {
@@ -364,6 +377,17 @@ void BluetoothManager::ServerCallbacks::onConnect(NimBLEServer *pServer, NimBLEC
     _mgr->recordConnection(connInfo);
     // Restart advertising to allow additional connections.
     NimBLEDevice::startAdvertising();
+
+    if (_mgr->_gatewayOnline)
+    {
+        auto pkt = new BleOut{
+            BleType::BLE_GATEWAY,
+            connInfo.getConnHandle(),
+            0,
+            _mgr->_nodeID,
+            std::vector<uint8_t>{1}};
+        _mgr->enqueueBleOut(pkt);
+    }
 }
 
 void BluetoothManager::ServerCallbacks::onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
@@ -392,4 +416,23 @@ void BluetoothManager::CharacteristicCallbacks::onWrite(NimBLECharacteristic *pC
         delete inPkt;
         Serial.println("BLE RX queue full, dropping packet");
     }
+}
+
+void BluetoothManager::queueGatewayStatus(bool online)
+{
+    uint8_t flag = online ? 1 : 0; // tiny payload distinguishes state
+    std::vector<uint8_t> payload{flag};
+
+    xSemaphoreTake(_connectedDevicesMutex, portMAX_DELAY);
+    for (auto &kv : _connectedDevices)
+    {
+        auto pkt = new BleOut{
+            BleType::BLE_GATEWAY,
+            kv.first, // connHandle
+            0,
+            _nodeID,
+            payload};
+        enqueueBleOut(pkt);
+    }
+    xSemaphoreGive(_connectedDevicesMutex);
 }

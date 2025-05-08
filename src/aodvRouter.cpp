@@ -1,5 +1,6 @@
 #include "AODVRouter.h"
 #include <Arduino.h>
+#include "gatewayManager.h"
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
@@ -795,18 +796,26 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     size_t offset = deserialiseUserMsgHeader(payload, umh, 0);
 
     const uint8_t *message = payload + offset;
-    size_t messageLen = payloadLen - sizeof(UserMsgHeader);
+    size_t messageLen = payloadLen - offset;
+
+    if ((_myNodeID == umh.toNodeID) && (base.flags & TO_GATEWAY))
+    {
+        if (_gwMgr) // forward to GatewayManager
+            _gwMgr->uplink(umh.fromUserID, umh.toUserID,
+                           (const char *)message);
+        return; // stop normal routing
+    }
 
     if (_myNodeID == umh.toNodeID)
     {
-        if (base.flags == FROM_GATEWAY) 
+        if (base.flags & FROM_GATEWAY)
         {
             Serial.println("[AODVRouter] Received gateway user message");
             Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
             Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
             _clientNotifier->notify(Outgoing{BleType::BLE_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
-        } 
+        }
         Serial.println("[AODVRouter] Entered I am receiver path User Message");
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);

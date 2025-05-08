@@ -6,46 +6,50 @@
 #include "NetworkMessageHandler.h"
 #include "userSessionManager.h" // this is wrong actually only tracks local users :( --> need to global user table in the router
 #include <ArduinoJson.h>
+#include "bluetoothManager.h"
 class GatewayManager
 {
 public:
-    GatewayManager(const char*             apiURL,
-                   uint32_t                nodeID,
-                   NetworkMessageHandler*  nmh,
-                   UserSessionManager*     usm);
+    GatewayManager(const char *apiURL,
+                   uint32_t nodeID,
+                   NetworkMessageHandler *nmh,
+                   UserSessionManager *usm,
+                   BluetoothManager *btm);
 
     void begin();
 
-    // called by NMH for TO_GATEWAY traffic
+    //  called by NMH for TO_GATEWAY traffic
     void uplink(uint32_t srcUser,
                 uint32_t dstUser,
-                const char* text);
+                const char *text);
 
-    // Wi-Fi event hooks
+    //  Wi-Fi event hooks
     void onWifiUp();
     void onWifiDown();
 
 private:
-    struct UplinkMsg {
-        char    id[13];   // 12-char randID + '\0'
+    struct UplinkMsg
+    {
+        char id[13]; // 12-char randID + '\0'
         uint32_t from;
         uint32_t to;
-        char    body[128];
+        char body[128];
     };
 
-    static void syncTask(void* pv);
+    static void syncTask(void *pv);
 
-    bool oneSync();                 // does a single /syncNode round
-    void buildSeen(JsonArray& a);   // push currently connected user-IDs
+    bool oneSync();               // does a single /syncNode round
+    void buildSeen(JsonArray &a); // push currently connected user-IDs
 
-    QueueHandle_t   _txQ;
+    QueueHandle_t _txQ;
     EventGroupHandle_t _evt;
     static constexpr EventBits_t WIFI_READY = 0x01;
 
-    String     _api;
-    uint32_t   _me;
-    NetworkMessageHandler* _nmh;
-    UserSessionManager*    _usm;
+    String _api;
+    uint32_t _me;
+    NetworkMessageHandler *_nmh;
+    UserSessionManager *_usm;
+    BluetoothManager *_btMgr;
 };
 
 #endif

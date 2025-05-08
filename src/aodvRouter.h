@@ -14,6 +14,8 @@
 #include "userSessionManager.h"
 #include "IClientNotifier.h"
 
+class GatewayManager;
+
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
 #endif
@@ -109,6 +111,8 @@ public:
     std::vector<uint32_t> getKnownNodeIDs() const;
     std::vector<uint32_t> getKnownUserIDs() const;
 
+    void setGatewayManager(GatewayManager* g) { _gwMgr = g; }
+
 private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;
@@ -121,6 +125,8 @@ private:
     MQTTManager *_mqttManager;
 
     IClientNotifier *_clientNotifier;
+
+    GatewayManager* _gwMgr = nullptr; 
 
     struct Lock
     {

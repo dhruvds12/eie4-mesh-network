@@ -37,7 +37,7 @@ struct BleIn
 class BluetoothManager : public IClientNotifier
 {
 public:
-    BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler);
+    BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler, uint32_t nodeID);
     ~BluetoothManager();
 
     void setNetworkMessageHandler(NetworkMessageHandler *nh)
@@ -70,6 +70,14 @@ public:
 
     bool notify(const Outgoing &o) override;
 
+    void setGatewayState(bool on)
+    {
+        if (on == _gatewayOnline)
+            return;
+        _gatewayOnline = on;
+        queueGatewayStatus(on);
+    }
+
 private:
     NimBLEServer *pServer;
     NimBLEService *pService;
@@ -88,6 +96,10 @@ private:
 
     QueueHandle_t _bleTxQueue;
     static void bleTxWorker(void *);
+
+    bool _gatewayOnline = false;
+
+    uint32_t _nodeID;
 
     bool enqueueBleOut(BleOut *pkt)
     {
@@ -111,6 +123,7 @@ private:
         LIST_USERS_RESP = 0x08,
         GATEWAY_AVAILABLE = 0x09,
         USER_MSG_GATEWAY = 0x0A,
+        GATEWAY_OFFLINE = 0x0B,
         USER_MSG_ACCEPTED = 0x10,
     };
 
@@ -118,6 +131,8 @@ private:
     void removeConnection(const NimBLEConnInfo &connInfo);
     void processIncomingMessage(uint16_t connHandle, const std::string &msg);
     void onLoRaMessage(uint32_t targetUserId, const std::string &payload);
+
+    void queueGatewayStatus(bool online);
 
     // Inner class to handle connection callbacks.
     class ServerCallbacks : public NimBLEServerCallbacks

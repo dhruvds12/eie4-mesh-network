@@ -57,7 +57,7 @@ void VextOFF(void)
 
 void setup()
 {
-  btManager = new BluetoothManager(&userSessionManager, nullptr);
+  btManager = new BluetoothManager(&userSessionManager, nullptr, getNodeID());
   aodvRouter = new AODVRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager, btManager);
   networkMessageHandler = new NetworkMessageHandler(aodvRouter);
 

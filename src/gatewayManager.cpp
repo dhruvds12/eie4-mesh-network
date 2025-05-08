@@ -5,8 +5,10 @@
 GatewayManager::GatewayManager(const char *url,
                                uint32_t id,
                                NetworkMessageHandler *nmh,
-                               UserSessionManager *usm)
-    : _api(url), _me(id), _nmh(nmh), _usm(usm)
+                               UserSessionManager *usm, 
+                               BluetoothManager *btm                          
+                            )
+    : _api(url), _me(id), _nmh(nmh), _usm(usm), _btMgr(btm)
 {
     _txQ = xQueueCreate(30, sizeof(UplinkMsg));
 
@@ -22,6 +24,7 @@ void GatewayManager::begin()
 
 void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
 {
+
     UplinkMsg m;
 
     for (int i = 0; i < 12; ++i)
@@ -40,8 +43,18 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
     xQueueSend(_txQ, &m, 0);
 }
 
-void GatewayManager::onWifiUp() { xEventGroupSetBits(_evt, WIFI_READY); }
-void GatewayManager::onWifiDown() { xEventGroupClearBits(_evt, WIFI_READY); }
+void GatewayManager::onWifiUp()
+{
+    xEventGroupSetBits(_evt, WIFI_READY);
+    if (_btMgr) _btMgr->setGatewayState(true);
+}
+
+void GatewayManager::onWifiDown()
+{
+    xEventGroupClearBits(_evt, WIFI_READY);
+    if (_btMgr) _btMgr->setGatewayState(false);
+}
+
 
 void GatewayManager::syncTask(void *pv)
 {
