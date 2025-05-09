@@ -7,6 +7,9 @@ static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, uint32_t myNodeID, UserSessionManager *usm, IClientNotifier *icm)
     : _radioManager(radioManager), _mqttManager(MQTTManager), _myNodeID(myNodeID), _routerTaskHandler(nullptr), _usm(usm), _clientNotifier(icm)
 {
+    // Creates recursive mutex
+    _mutex = xSemaphoreCreateRecursiveMutex();
+    configASSERT(_mutex);
 }
 
 // TODO: can the ifdef be removed?
@@ -19,8 +22,7 @@ bool AODVRouter::begin()
     sendBroadcastInfo();
     return true;
 #else
-    _mutex = xSemaphoreCreateRecursiveMutex();
-    configASSERT(_mutex);
+
     BaseType_t taskCreated = xTaskCreate(
         routerTask,
         "AODVRouterTask",
@@ -1436,7 +1438,6 @@ std::vector<uint32_t> AODVRouter::getKnownUserIDs() const
     }
     return users;
 }
-
 
 /*
 

@@ -19,6 +19,7 @@ GatewayManager::GatewayManager(const char *url,
 void GatewayManager::begin()
 {
     _nmh->setGatewayManager(this);
+    // TODO: DO these need to be pinned to core 1
     xTaskCreate(syncTask, "GW-SYNC", 8192, this, 1, nullptr);
     xTaskCreate(
         [](void *pv)
@@ -237,10 +238,10 @@ void GatewayManager::buildSeen(JsonArray &arr)
     for (uint32_t uid : _usm->getConnectedUsers())
         arr.add(String(uid));
 
-    // Serial.println("Getting global users");
-    // // 2. remote users that can be routed via mesh
-    // for (uint32_t uid : _router->getKnownUserIDs())
-    //     arr.add(String(uid));
+    Serial.println("Getting global users");
+    // 2. remote users that can be routed via mesh
+    for (uint32_t uid : _router->getKnownUserIDs())
+        arr.add(String(uid));
 
     Serial.println("Finished getting users");
 }

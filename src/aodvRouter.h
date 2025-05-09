@@ -436,8 +436,6 @@ private:
         return msgs;
     }
 
-
-
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);
     FRIEND_TEST(AODVRouterTest, BasicReceiveRREP);
