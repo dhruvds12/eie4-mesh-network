@@ -70,13 +70,7 @@ public:
 
     bool notify(const Outgoing &o) override;
 
-    void setGatewayState(bool on)
-    {
-        if (on == _gatewayOnline)
-            return;
-        _gatewayOnline = on;
-        queueGatewayStatus(on);
-    }
+    bool setGatewayState(bool on);
 
     bool enqueueBleOut(BleOut *pkt)
     {

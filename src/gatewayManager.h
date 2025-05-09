@@ -45,7 +45,14 @@ private:
 
     QueueHandle_t _txQ;
     EventGroupHandle_t _evt;
-    static constexpr EventBits_t WIFI_READY = 0x01;
+    enum : EventBits_t {
+        WIFI_READY = 1 << 0,   // set while STA connected/Got-IP
+        GW_EVT_ON  = 1 << 1,   // edge – tell BLE “gateway became online”
+        GW_EVT_OFF = 1 << 2    // edge – tell BLE “gateway went offline”
+    };
+    
+    void wifiEventTask();
+    bool registerNode();
 
     String _api;
     uint32_t _me;
@@ -53,6 +60,7 @@ private:
     UserSessionManager *_usm;
     BluetoothManager *_btMgr;
     AODVRouter *_router;
+    bool _registered = false;
 };
 
 #endif

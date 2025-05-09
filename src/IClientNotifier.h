@@ -11,6 +11,7 @@ enum class BleType : uint8_t
     BLE_List_Nodes,
     BLE_GATEWAY,
     BLE_USER_GATEWAY,
+    BLE_GATEWAY_STATUS,
 };
 
 struct Outgoing

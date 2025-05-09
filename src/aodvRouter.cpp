@@ -1418,8 +1418,6 @@ void AODVRouter::removeItemRoutingTable(uint32_t id)
     _routeTable.erase(id);
 }
 
-// AODVRouter.cpp (inside class AODVRouter)
-
 std::vector<uint32_t> AODVRouter::getKnownNodeIDs() const
 {
     Lock l(_mutex);
@@ -1438,6 +1436,7 @@ std::vector<uint32_t> AODVRouter::getKnownUserIDs() const
     }
     return users;
 }
+
 
 /*
 

@@ -90,6 +90,8 @@ void setup()
   networkMessageHandler->setGatewayManager(gwMgr);
   aodvRouter->setGatewayManager(gwMgr);
 
+  // aodvRouter->getKnownUserIDs();
+
   // Initialise display if needed
   displayManager.initialise();
   delay(100);

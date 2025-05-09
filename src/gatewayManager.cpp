@@ -19,7 +19,12 @@ GatewayManager::GatewayManager(const char *url,
 void GatewayManager::begin()
 {
     _nmh->setGatewayManager(this);
-    xTaskCreatePinnedToCore(syncTask, "GW-SYNC", 6144, this, 3, nullptr, 1);
+    xTaskCreate(syncTask, "GW-SYNC", 8192, this, 1, nullptr);
+    xTaskCreate(
+        [](void *pv)
+        { static_cast<GatewayManager *>(pv)->wifiEventTask(); },
+        "GW-WIFI",
+        2048, this, 3, nullptr);
 }
 
 void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
@@ -45,16 +50,27 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
 
 void GatewayManager::onWifiUp()
 {
-    xEventGroupSetBits(_evt, WIFI_READY);
-    if (_btMgr)
-        _btMgr->setGatewayState(true);
-}
+    xEventGroupSetBits(_evt, WIFI_READY | GW_EVT_ON);
 
+    // Kick off registration if needed:
+    if (!_registered)
+    {
+        // we can launch it in a detached task so we don't block the event-handler
+        xTaskCreate([](void *pv)
+                    {
+              auto self = static_cast<GatewayManager*>(pv);
+              while (!self->_registered) {
+                if (self->registerNode()) break;
+                vTaskDelay(pdMS_TO_TICKS(2000));
+             }
+              vTaskDelete(nullptr); }, "GW-REG", 4096, this, 2, nullptr);
+    }
+}
 void GatewayManager::onWifiDown()
 {
+    /* clear the level bit, raise the “edge” */
     xEventGroupClearBits(_evt, WIFI_READY);
-    if (_btMgr)
-        _btMgr->setGatewayState(false);
+    xEventGroupSetBits(_evt, GW_EVT_OFF);
 }
 
 void GatewayManager::syncTask(void *pv)
@@ -71,22 +87,55 @@ void GatewayManager::syncTask(void *pv)
                             pdTRUE,  // wait for *all* bits (just one)
                             portMAX_DELAY);
 
+        if (!self->_registered)
+        {
+            Serial.println("Waiting to register before syncing…");
+            // back off a bit
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+
         /* Do ONE “/syncNode” round-trip.  If it returns false
         (HTTP error / JSON parse fail) wait 2 s and retry.         */
         if (!self->oneSync())
-            vTaskDelay(pdMS_TO_TICKS(2000));
+            Serial.println("oneSync() failed; retrying in 2 s");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
+
+void GatewayManager::wifiEventTask()
+{
+    for (;;)
+    {
+        EventBits_t bits = xEventGroupWaitBits(
+            _evt, GW_EVT_ON | GW_EVT_OFF,
+            pdTRUE,  // clear on exit
+            pdFALSE, // any bit
+            portMAX_DELAY);
+
+        if (bits & GW_EVT_ON)
+        {
+            _btMgr->setGatewayState(true);
+        }
+        else if (bits & GW_EVT_OFF)
+        {
+            _btMgr->setGatewayState(false);
+        }
     }
 }
 
 bool GatewayManager::oneSync()
 {
+    Serial.print("Started sync\n");
     /* -------- assemble request JSON -------- */
     JsonDocument req;
     req["gwId"] = String(_me);
 
     // SEEN list
     JsonArray aSeen = req["seen"].to<JsonArray>();
+    Serial.println("requesting build seen");
     buildSeen(aSeen);
+    Serial.println("Received build seen");
 
     // UPLINK msgs
     JsonArray aUp = req["uplink"].to<JsonArray>();
@@ -107,18 +156,21 @@ bool GatewayManager::oneSync()
     serializeJson(req, body);
 
     /* -------- HTTP POST /syncNode -------- */
+    Serial.print("Sent http\n");
     HTTPClient http;
     http.setTimeout(35000);
-    http.begin(_api + "/syncNode");
+    http.begin(_api + "/sync/node");
     http.addHeader("Content-Type", "application/json");
     int rc = http.POST(body);
     if (rc != 200)
     {
         http.end();
+        Serial.print("Failed http request -- 401/404 most likely\n");
         return false;
     }
 
     /* -------- parse response -------- */
+    Serial.println("Parsing response");
     JsonDocument resp;
     DeserializationError e = deserializeJson(resp, http.getStream());
     http.end();
@@ -181,10 +233,44 @@ bool GatewayManager::oneSync()
 void GatewayManager::buildSeen(JsonArray &arr)
 {
     // 1. locally connected phones
+    Serial.println("Getting local users");
     for (uint32_t uid : _usm->getConnectedUsers())
         arr.add(String(uid));
 
-    // 2. remote users that can be routed via mesh
-    for (uint32_t uid : _router->getReachableUserIDs())
-        arr.add(String(uid));
+    // Serial.println("Getting global users");
+    // // 2. remote users that can be routed via mesh
+    // for (uint32_t uid : _router->getKnownUserIDs())
+    //     arr.add(String(uid));
+
+    Serial.println("Finished getting users");
+}
+
+// in gatewayManager.cpp
+bool GatewayManager::registerNode()
+{
+    Serial.print("Registering gateway… ");
+    // build payload {"gwId": "<id>"}
+    JsonDocument doc;
+    doc["gwId"] = String(_me);
+    String body;
+    serializeJson(doc, body);
+
+    HTTPClient http;
+    http.setTimeout(10000);
+    http.begin(_api + "/register/node"); // <-- your actual register route
+    http.addHeader("Content-Type", "application/json");
+    int rc = http.POST(body);
+    http.end();
+
+    if (rc == 200)
+    {
+        Serial.println("ok");
+        _registered = true;
+        return true;
+    }
+    else
+    {
+        Serial.printf("failed (%d)\n", rc);
+        return false;
+    }
 }

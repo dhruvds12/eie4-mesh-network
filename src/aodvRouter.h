@@ -113,16 +113,6 @@ public:
 
     void setGatewayManager(GatewayManager *g) { _gwMgr = g; }
 
-    inline std::vector<uint32_t> getReachableUserIDs() const
-    {
-        Lock l(_mutex);
-        std::vector<uint32_t> v;
-        v.reserve(_gut.size());
-        for (auto &kv : _gut)
-            v.push_back(kv.first);
-        return v;
-    }
-
 private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;

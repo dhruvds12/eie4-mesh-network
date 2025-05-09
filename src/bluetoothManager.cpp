@@ -124,12 +124,46 @@ void BluetoothManager::bleTxWorker(void *pv)
             case BleType::BLE_List_Nodes:
                 mgr->sendToClient(pkt->connHandle, std::string(pkt->data.begin(), pkt->data.end()));
                 break;
+            case BleType::BLE_GATEWAY_STATUS:
+            {
+                bool online = !pkt->data.empty() && pkt->data[0];
+                mgr->queueGatewayStatus(online); // call the old helper here
+                break;
+            }
             default:
                 break;
             }
             delete pkt;
         }
     }
+}
+
+bool BluetoothManager::setGatewayState(bool online)
+{
+    uint8_t flag = online ? 1 : 0;
+    std::vector<uint8_t> payload{flag};
+
+    _gatewayOnline = online;
+
+    /* snapshot the connection list, then release the mutex
+       before we ever touch NimBLE */
+    std::vector<uint16_t> handles;
+    {
+        xSemaphoreTake(_connectedDevicesMutex, portMAX_DELAY);
+        for (auto &kv : _connectedDevices)
+            handles.push_back(kv.first);
+        xSemaphoreGive(_connectedDevicesMutex);
+    }
+
+    Serial.print("Reached here!\n");
+
+    for (auto h : handles)
+        enqueueBleOut(new BleOut{
+            BleType::BLE_GATEWAY, h, 0, _nodeID, payload});
+
+    Serial.print("Returning true\n");
+
+    return true;
 }
 
 void BluetoothManager::startAdvertising()
@@ -218,7 +252,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     // Need at least 1 + 4 + 4 = 9 bytes of header
     if (msg.size() < 9)
     {
-        Serial.println("Incoming BLE packet too short");
+        Serial.println("Incoming BLE packet too short\n");
         return;
     }
 
@@ -245,6 +279,18 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
         Serial.printf("Received user_ID_UPDATE for %u with connHandle %u\n", sender, connHandle);
         _userMgr->addOrRefresh(sender, connHandle);
+
+        if (_gatewayOnline)
+        {
+            Serial.print("Sent Gateway available\n");
+            auto pkt = new BleOut{
+                BleType::BLE_GATEWAY,
+                connHandle,
+                0,
+                _nodeID,
+                std::vector<uint8_t>{1}};
+            enqueueBleOut(pkt);
+        }
     }
     break;
 
@@ -308,7 +354,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case USER_MSG_GATEWAY:
     {
-        Serial.printf("Received user_msg from %u to %u\n", sender, dest);
+        Serial.printf("Received user_msg gateway from %u to %u\n", sender, dest);
         if (_userMgr->knowsUser(sender))
         {
 
@@ -377,17 +423,6 @@ void BluetoothManager::ServerCallbacks::onConnect(NimBLEServer *pServer, NimBLEC
     _mgr->recordConnection(connInfo);
     // Restart advertising to allow additional connections.
     NimBLEDevice::startAdvertising();
-
-    if (_mgr->_gatewayOnline)
-    {
-        auto pkt = new BleOut{
-            BleType::BLE_GATEWAY,
-            connInfo.getConnHandle(),
-            0,
-            _mgr->_nodeID,
-            std::vector<uint8_t>{1}};
-        _mgr->enqueueBleOut(pkt);
-    }
 }
 
 void BluetoothManager::ServerCallbacks::onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason)
