@@ -159,6 +159,8 @@ void AODVRouter::sendBroadcastInfo()
     constexpr size_t SPACE = MAX_BUF - BASE_HDR - DIFF_HDR;
     constexpr size_t IDS_PER_PKT = SPACE / sizeof(uint32_t);
 
+    //TODO edit the code below to contain a new flag to signify that this node is a gateway in the periodic broadcast
+
     size_t idxA = 0, idxR = 0;
     if (added.empty() && removed.empty())
     {

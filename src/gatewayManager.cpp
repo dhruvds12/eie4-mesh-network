@@ -211,7 +211,7 @@ bool GatewayManager::oneSync()
             }
             else
             {
-                // store in the userInfo
+                //TODO store in the userInfo
             }
         }
         else
@@ -246,7 +246,6 @@ void GatewayManager::buildSeen(JsonArray &arr)
     Serial.println("Finished getting users");
 }
 
-// in gatewayManager.cpp
 bool GatewayManager::registerNode()
 {
     Serial.print("Registering gateway… ");
@@ -258,7 +257,7 @@ bool GatewayManager::registerNode()
 
     HTTPClient http;
     http.setTimeout(10000);
-    http.begin(_api + "/register/node"); // <-- your actual register route
+    http.begin(_api + "/register/node");
     http.addHeader("Content-Type", "application/json");
     int rc = http.POST(body);
     http.end();

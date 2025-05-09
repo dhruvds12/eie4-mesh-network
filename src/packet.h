@@ -24,6 +24,7 @@ enum PacketType : uint8_t
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
+    //TODO new packet type for long range + multihop participation broadcast!!! 
 
 };
 

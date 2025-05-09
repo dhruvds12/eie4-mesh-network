@@ -20,6 +20,7 @@ struct UserInfo
     uint16_t bleConnHandle; // INVALID_HANDLE if not connected
     bool isConnected;
     unsigned long lastSeen; // millis() timestamp of last activity
+    //TODO storage per user of messages
 };
 
 /**
