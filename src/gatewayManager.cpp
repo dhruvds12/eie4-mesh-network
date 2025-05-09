@@ -81,21 +81,21 @@ void GatewayManager::syncTask(void *pv)
 bool GatewayManager::oneSync()
 {
     /* -------- assemble request JSON -------- */
-    StaticJsonDocument<1024> req;
+    JsonDocument req;
     req["gwId"] = String(_me);
 
     // SEEN list
-    JsonArray aSeen = req.createNestedArray("seen");
+    JsonArray aSeen = req["seen"].to<JsonArray>();
     buildSeen(aSeen);
 
     // UPLINK msgs
-    JsonArray aUp = req.createNestedArray("uplink");
+    JsonArray aUp = req["uplink"].to<JsonArray>();
     UplinkMsg upl;
     while (uxQueueMessagesWaiting(_txQ) && aUp.size() < 10) // batch ≤10
     {
         if (xQueueReceive(_txQ, &upl, 0) == pdTRUE)
         {
-            JsonObject m = aUp.createNestedObject();
+            JsonObject m = aUp.add<JsonObject>();
             m["msgId"] = upl.id;
             m["src"] = String(upl.from);
             m["dst"] = String(upl.to);
@@ -119,7 +119,7 @@ bool GatewayManager::oneSync()
     }
 
     /* -------- parse response -------- */
-    StaticJsonDocument<2048> resp;
+    JsonDocument resp;
     DeserializationError e = deserializeJson(resp, http.getStream());
     http.end();
     if (e)
