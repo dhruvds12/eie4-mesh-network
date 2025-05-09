@@ -78,6 +78,16 @@ public:
         queueGatewayStatus(on);
     }
 
+    bool enqueueBleOut(BleOut *pkt)
+    {
+        if (xQueueSend(_bleTxQueue, &pkt, pdMS_TO_TICKS(10)) != pdPASS)
+        {
+            delete pkt;
+            return false;
+        }
+        return true;
+    }
+
 private:
     NimBLEServer *pServer;
     NimBLEService *pService;
@@ -101,15 +111,6 @@ private:
 
     uint32_t _nodeID;
 
-    bool enqueueBleOut(BleOut *pkt)
-    {
-        if (xQueueSend(_bleTxQueue, &pkt, pdMS_TO_TICKS(10)) != pdPASS)
-        {
-            delete pkt;
-            return false;
-        }
-        return true;
-    }
 
     enum BLEMessageType : uint8_t
     {

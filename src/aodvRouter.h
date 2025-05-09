@@ -102,16 +102,26 @@ public:
      * @param len The length of the raw data
      */
 
-    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags=0);
+    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
-    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags=0);
+    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
     std::vector<uint32_t> getKnownNodeIDs() const;
     std::vector<uint32_t> getKnownUserIDs() const;
 
-    void setGatewayManager(GatewayManager* g) { _gwMgr = g; }
+    void setGatewayManager(GatewayManager *g) { _gwMgr = g; }
+
+    inline std::vector<uint32_t> getReachableUserIDs() const
+    {
+        Lock l(_mutex);
+        std::vector<uint32_t> v;
+        v.reserve(_gut.size());
+        for (auto &kv : _gut)
+            v.push_back(kv.first);
+        return v;
+    }
 
 private:
     SemaphoreHandle_t _mutex;
@@ -126,7 +136,7 @@ private:
 
     IClientNotifier *_clientNotifier;
 
-    GatewayManager* _gwMgr = nullptr; 
+    GatewayManager *_gwMgr = nullptr;
 
     struct Lock
     {
@@ -435,6 +445,8 @@ private:
         _userRouteBuffer.erase(it);
         return msgs;
     }
+
+
 
 #ifdef UNIT_TEST
     FRIEND_TEST(AODVRouterTest, BasicSendDataTest);

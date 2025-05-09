@@ -5,10 +5,10 @@
 GatewayManager::GatewayManager(const char *url,
                                uint32_t id,
                                NetworkMessageHandler *nmh,
-                               UserSessionManager *usm, 
-                               BluetoothManager *btm                          
-                            )
-    : _api(url), _me(id), _nmh(nmh), _usm(usm), _btMgr(btm)
+                               UserSessionManager *usm,
+                               BluetoothManager *btm,
+                               AODVRouter *router)
+    : _api(url), _me(id), _nmh(nmh), _usm(usm), _btMgr(btm), _router(router)
 {
     _txQ = xQueueCreate(30, sizeof(UplinkMsg));
 
@@ -46,15 +46,16 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
 void GatewayManager::onWifiUp()
 {
     xEventGroupSetBits(_evt, WIFI_READY);
-    if (_btMgr) _btMgr->setGatewayState(true);
+    if (_btMgr)
+        _btMgr->setGatewayState(true);
 }
 
 void GatewayManager::onWifiDown()
 {
     xEventGroupClearBits(_evt, WIFI_READY);
-    if (_btMgr) _btMgr->setGatewayState(false);
+    if (_btMgr)
+        _btMgr->setGatewayState(false);
 }
-
 
 void GatewayManager::syncTask(void *pv)
 {
@@ -90,19 +91,20 @@ bool GatewayManager::oneSync()
     // UPLINK msgs
     JsonArray aUp = req.createNestedArray("uplink");
     UplinkMsg upl;
-    while (uxQueueMessagesWaiting(_txQ) && aUp.size()<10)   // batch ≤10
+    while (uxQueueMessagesWaiting(_txQ) && aUp.size() < 10) // batch ≤10
     {
-        if (xQueueReceive(_txQ, &upl, 0)==pdTRUE)
+        if (xQueueReceive(_txQ, &upl, 0) == pdTRUE)
         {
             JsonObject m = aUp.createNestedObject();
             m["msgId"] = upl.id;
-            m["src"]   = String(upl.from);
-            m["dst"]   = String(upl.to);
-            m["body"]  = upl.body;
+            m["src"] = String(upl.from);
+            m["dst"] = String(upl.to);
+            m["body"] = upl.body;
         }
     }
 
-    String body;  serializeJson(req, body);
+    String body;
+    serializeJson(req, body);
 
     /* -------- HTTP POST /syncNode -------- */
     HTTPClient http;
@@ -110,16 +112,21 @@ bool GatewayManager::oneSync()
     http.begin(_api + "/syncNode");
     http.addHeader("Content-Type", "application/json");
     int rc = http.POST(body);
-    if (rc!=200) { http.end(); return false; }
+    if (rc != 200)
+    {
+        http.end();
+        return false;
+    }
 
     /* -------- parse response -------- */
     StaticJsonDocument<2048> resp;
     DeserializationError e = deserializeJson(resp, http.getStream());
     http.end();
-    if (e) return false;
+    if (e)
+        return false;
 
     /* Remove acked uplinks that may still be in queue */
-    for (const char* id : resp["ack"].as<JsonArray>())
+    for (const char *id : resp["ack"].as<JsonArray>())
     {
         // naive: nothing to do because we already popped them
         (void)id;
@@ -128,20 +135,56 @@ bool GatewayManager::oneSync()
     /* Downlink → mesh */
     for (JsonObject j : resp["down"].as<JsonArray>())
     {
-        const char* txt = j["body"] | "";
+        const char *txt = j["body"] | "";
         uint32_t src = strtoul(j["src"], nullptr, 10);
         uint32_t dst = strtoul(j["dst"], nullptr, 10);
 
-        _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
-                             dst,
-                             txt,
-                             src, 
-                             FROM_GATEWAY);
+        if (_usm->knowsUser(dst))
+        {
+            // the user is locally connected
+            // send connection directly over ble if connected or queue the msg
+            if (_usm->isOnline(dst))
+            {
+                auto pkt = new BleOut{
+                    BleType::BLE_USER_GATEWAY,
+                    _usm->getBleHandle(dst),
+                    dst,
+                    src,
+                    std::vector<uint8_t>(
+                        (const uint8_t *)txt,
+                        (const uint8_t *)txt + strlen(txt))};
+
+                _btMgr->enqueueBleOut(pkt);
+            }
+            else
+            {
+                // store in the userInfo
+            }
+        }
+        else
+        {
+
+            _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
+                                 dst,
+                                 txt,
+                                 src,
+                                 FROM_GATEWAY);
+        }
     }
 
-    /* 5) sleep suggested by server */
+    /* sleep suggested by server */
     uint32_t s = resp["sleep"] | 15;
-    vTaskDelay(pdMS_TO_TICKS(s*1000));
+    vTaskDelay(pdMS_TO_TICKS(s * 1000));
     return true;
 }
 
+void GatewayManager::buildSeen(JsonArray &arr)
+{
+    // 1. locally connected phones
+    for (uint32_t uid : _usm->getConnectedUsers())
+        arr.add(String(uid));
+
+    // 2. remote users that can be routed via mesh
+    for (uint32_t uid : _router->getReachableUserIDs())
+        arr.add(String(uid));
+}

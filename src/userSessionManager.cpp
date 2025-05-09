@@ -107,6 +107,20 @@ std::vector<UserInfo> UserSessionManager::allUsers() const
     return list;
 }
 
+std::vector<uint32_t> UserSessionManager::getConnectedUsers()
+{
+    readLock();
+    std::vector<uint32_t> list;
+    list.reserve(_users.size());
+    for (auto const &kv : _users)
+    {
+        list.push_back(kv.second.userID);
+    }
+    readUnlock();
+    return list;
+
+}
+
 void UserSessionManager::getAndClearDiff(std::vector<uint32_t> &added,
                                          std::vector<uint32_t> &removed)
 {

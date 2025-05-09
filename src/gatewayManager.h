@@ -7,14 +7,16 @@
 #include "userSessionManager.h" // this is wrong actually only tracks local users :( --> need to global user table in the router
 #include <ArduinoJson.h>
 #include "bluetoothManager.h"
+#include "aodvRouter.h"
 class GatewayManager
 {
 public:
-    GatewayManager(const char *apiURL,
-                   uint32_t nodeID,
+    GatewayManager(const char *url,
+                   uint32_t id,
                    NetworkMessageHandler *nmh,
                    UserSessionManager *usm,
-                   BluetoothManager *btm);
+                   BluetoothManager *btm,
+                   AODVRouter *router);
 
     void begin();
 
@@ -50,6 +52,7 @@ private:
     NetworkMessageHandler *_nmh;
     UserSessionManager *_usm;
     BluetoothManager *_btMgr;
+    AODVRouter *_router;
 };
 
 #endif

@@ -23,7 +23,8 @@ struct UserInfo
 };
 
 /**
- * @brief The UserSessionManager is used to manage sessions for users connected via bluetooth. Read preferring reader-writer mutex
+ * @brief The UserSessionManager is used to manage sessions for users connected via bluetooth. NOT Global user list that is kept in the GUT within router
+ * Read preferring reader-writer mutex
  *
  * IMPORTANT!!!!
  *
@@ -66,6 +67,8 @@ public:
 
     // Retrieve a snapshot of all known users
     std::vector<UserInfo> allUsers() const;
+
+    std::vector<uint32_t> getConnectedUsers();
 
     /// Call this to grab everything that’s been added/removed since
     /// the last time you called getAndClearDiff().
