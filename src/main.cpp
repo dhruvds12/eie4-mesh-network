@@ -14,6 +14,7 @@
 #include "mqttManager.h"
 #include "NetworkMessageHandler.h"
 #include "userSessionManager.h"
+#include "gatewayManager.h"
 
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
@@ -36,11 +37,12 @@ uint32_t getNodeID()
 DisplayManager displayManager;
 SX1262Config myRadio(8, 14, 12, 13);
 RadioManager radioManager(&myRadio);
-UserSessionManager userSessionManager;
 MQTTManager *mqttManager = nullptr;
 BluetoothManager *btManager = nullptr;
 AODVRouter *aodvRouter = nullptr;
 NetworkMessageHandler *networkMessageHandler = nullptr;
+UserSessionManager userSessionManager(mqttManager);
+GatewayManager *gwMgr = nullptr;
 
 void VextON(void)
 {
@@ -57,11 +59,6 @@ void VextOFF(void)
 
 void setup()
 {
-  btManager = new BluetoothManager(&userSessionManager, nullptr);
-  aodvRouter = new AODVRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager, btManager);
-  networkMessageHandler = new NetworkMessageHandler(aodvRouter);
-
-  btManager->setNetworkMessageHandler(networkMessageHandler);
   delay(100);
 
   Serial.begin(115200);
@@ -72,6 +69,26 @@ void setup()
   delay(100);
 
   Serial.printf("NODE ID: %lu\n", (unsigned long)getNodeID());
+
+  btManager = new BluetoothManager(&userSessionManager, nullptr, getNodeID());
+  aodvRouter = new AODVRouter(&radioManager, mqttManager, getNodeID(), &userSessionManager, btManager);
+  networkMessageHandler = new NetworkMessageHandler(aodvRouter);
+
+  btManager->setNetworkMessageHandler(networkMessageHandler);
+  // Initialize BLE using our abstraction.
+  btManager->init("HeltecNode2");
+  btManager->startAdvertising();
+  Serial.println("NimBLE advertising started...");
+
+  gwMgr = new GatewayManager("http://132.145.67.221:8443/v1",
+                             getNodeID(),
+                             networkMessageHandler,
+                             &userSessionManager,
+                             btManager,
+                             aodvRouter);
+  gwMgr->begin();
+
+  // aodvRouter->getKnownUserIDs();
 
   // Initialise display if needed
   displayManager.initialise();
@@ -84,6 +101,17 @@ void setup()
 
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
+  if (wifiConnected)
+    gwMgr->onWifiUp();
+
+  WiFi.onEvent([](WiFiEvent_t e)
+               {
+      if (!gwMgr) return;
+      if (e==ARDUINO_EVENT_WIFI_STA_CONNECTED ||
+          e==ARDUINO_EVENT_WIFI_STA_GOT_IP)
+          gwMgr->onWifiUp();
+      else if (e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)
+          gwMgr->onWifiDown(); });
 
   // Create the MQTTManager instance with the dynamically built subscribe topic.
   mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", getNodeID(), &radioManager, networkMessageHandler);
@@ -99,12 +127,8 @@ void setup()
     // add logic for mqtt client setup here....
     mqttManager->begin();
     aodvRouter->setMQTTManager(mqttManager);
+    userSessionManager.setMQTTManager(mqttManager);
   }
-
-  // Initialize BLE using our abstraction.
-  btManager->init("HeltecNode2");
-  btManager->startAdvertising();
-  Serial.println("NimBLE advertising started...");
 
   if (!radioManager.begin())
   {
@@ -137,10 +161,10 @@ void setup()
 void loop()
 {
 
-  delay(10000);
-  // Example: print the number of connected clients.
-  uint8_t n = btManager->getServer()->getConnectedCount();
-  Serial.printf("Connected count: %u\n", n);
+  // delay(10000);
+  // // Example: print the number of connected clients.
+  // uint8_t n = btManager->getServer()->getConnectedCount();
+  // Serial.printf("Connected count: %u\n", n);
 
   // if (n)
   // {

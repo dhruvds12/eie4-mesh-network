@@ -23,21 +23,21 @@ struct BleOut
 {
     BleType type;
     uint16_t connHandle;
-    uint32_t to; // to a node or user -> depends on type
+    uint32_t to;   // to a node or user -> depends on type
     uint32_t from; // from a node or a user -> depends on type
     std::vector<uint8_t> data;
 };
 
-struct BleIn {
-    uint16_t       connHandle;
-    std::string   data;
-  };
-  
+struct BleIn
+{
+    uint16_t connHandle;
+    std::string data;
+};
 
 class BluetoothManager : public IClientNotifier
 {
 public:
-    BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler);
+    BluetoothManager(UserSessionManager *sessionMgr, NetworkMessageHandler *networkHandler, uint32_t nodeID);
     ~BluetoothManager();
 
     void setNetworkMessageHandler(NetworkMessageHandler *nh)
@@ -70,6 +70,18 @@ public:
 
     bool notify(const Outgoing &o) override;
 
+    bool setGatewayState(bool on);
+
+    bool enqueueBleOut(BleOut *pkt)
+    {
+        if (xQueueSend(_bleTxQueue, &pkt, pdMS_TO_TICKS(10)) != pdPASS)
+        {
+            delete pkt;
+            return false;
+        }
+        return true;
+    }
+
 private:
     NimBLEServer *pServer;
     NimBLEService *pService;
@@ -83,21 +95,16 @@ private:
     std::map<uint16_t, NimBLEConnInfo> _connectedDevices;
     SemaphoreHandle_t _connectedDevicesMutex;
 
-    QueueHandle_t    _bleRxQueue;
-    static void      bleRxWorker(void *pv);
+    QueueHandle_t _bleRxQueue;
+    static void bleRxWorker(void *pv);
 
     QueueHandle_t _bleTxQueue;
     static void bleTxWorker(void *);
 
-    bool enqueueBleOut(BleOut *pkt)
-    {
-        if (xQueueSend(_bleTxQueue, &pkt, pdMS_TO_TICKS(10)) != pdPASS)
-        {
-            delete pkt;
-            return false;
-        }
-        return true;
-    }
+    bool _gatewayOnline = false;
+
+    uint32_t _nodeID;
+
 
     enum BLEMessageType : uint8_t
     {
@@ -109,41 +116,45 @@ private:
         LIST_USERS_REQ = 0x06,
         LIST_NODE_RESP = 0x07,
         LIST_USERS_RESP = 0x08,
-        USER_MSG_ACCEPTED = 0x09
+        GATEWAY_AVAILABLE = 0x09,
+        USER_MSG_GATEWAY = 0x0A,
+        GATEWAY_OFFLINE = 0x0B,
+        USER_MSG_ACCEPTED = 0x10,
     };
 
-    
     void recordConnection(const NimBLEConnInfo &connInfo);
     void removeConnection(const NimBLEConnInfo &connInfo);
     void processIncomingMessage(uint16_t connHandle, const std::string &msg);
     void onLoRaMessage(uint32_t targetUserId, const std::string &payload);
-    
+
+    void queueGatewayStatus(bool online);
+
     // Inner class to handle connection callbacks.
     class ServerCallbacks : public NimBLEServerCallbacks
     {
-        public:
+    public:
         ServerCallbacks(BluetoothManager *manager) : _mgr(manager) {}
         void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override;
         void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override;
-        
-        private:
+
+    private:
         BluetoothManager *_mgr;
     };
-    
+
     class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     {
-        public:
+    public:
         CharacteristicCallbacks(BluetoothManager *mgr) : _mgr(mgr) {}
         void onWrite(NimBLECharacteristic *pChr, NimBLEConnInfo &connInfo) override;
-        
-        private:
+
+    private:
         BluetoothManager *_mgr;
     };
-    
+
     ServerCallbacks *_serverCallbacks;
     CharacteristicCallbacks *_txCallbacks;
     CharacteristicCallbacks *_rxCallbacks;
-    
+
     static std::vector<uint8_t> encodeListResponse(BLEMessageType type, const std::vector<uint32_t> &ids);
     static std::string encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload);
 };

@@ -1,7 +1,8 @@
 #include "userSessionManager.h"
+#include "mqttmanager.h"
 
-UserSessionManager::UserSessionManager()
-    : _readCount(0)
+UserSessionManager::UserSessionManager(MQTTManager *mqttManager)
+    : _readCount(0), _mqttManager(mqttManager)
 {
     _readCountMutex = xSemaphoreCreateMutex();
     _writeMutex = xSemaphoreCreateMutex();
@@ -34,6 +35,9 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
         _diffAdded.insert(userID);
     }
     writeUnlock();
+    if(_mqttManager != nullptr) {
+        _mqttManager->publishUserAdded(userID);
+    }
     Serial.printf("Added new user %u\n", userID);
 }
 
@@ -101,6 +105,20 @@ std::vector<UserInfo> UserSessionManager::allUsers() const
     }
     readUnlock();
     return list;
+}
+
+std::vector<uint32_t> UserSessionManager::getConnectedUsers()
+{
+    readLock();
+    std::vector<uint32_t> list;
+    list.reserve(_users.size());
+    for (auto const &kv : _users)
+    {
+        list.push_back(kv.second.userID);
+    }
+    readUnlock();
+    return list;
+
 }
 
 void UserSessionManager::getAndClearDiff(std::vector<uint32_t> &added,

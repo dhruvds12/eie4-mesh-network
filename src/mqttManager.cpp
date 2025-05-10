@@ -156,6 +156,21 @@ void MQTTManager::publishPacket(uint32_t packetID, const uint8_t *buffer, size_t
     }
 }
 
+void MQTTManager::publishUserAdded(uint32_t userID)
+{
+    if (connected)
+    {
+        JsonDocument doc;
+        doc["action"] = ACTION_USER_ADDED;
+        doc["user_id"] = userID;
+
+        char jsonBuffer[256];
+        size_t n = serializeJson(doc, jsonBuffer);
+        Serial.println("[MQTTManager] Queued new user");
+        enqueueSendMQTTQueue(jsonBuffer, n);
+    }
+}
+
 // Static event handler called on MQTT events.
 void MQTTManager::mqttEventHandler(void *handler_args, esp_event_base_t base,
                                    int32_t event_id, void *event_data)
@@ -278,7 +293,7 @@ void MQTTManager::processMessage(const mqtt_message_t &msg)
         }
         uint32_t dest = doc["destination"];
         const char *mt = doc["message"];
-        if (!_networkHandler->enqueueMessage(dest, false, mt))
+        if (!_networkHandler->enqueueMessage(MsgKind::NODE, dest, mt))
         {
             Serial.println("Failed to enqueue network message");
         }

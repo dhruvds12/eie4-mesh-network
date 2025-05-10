@@ -14,6 +14,8 @@
 #include "userSessionManager.h"
 #include "IClientNotifier.h"
 
+class GatewayManager;
+
 #ifdef UNIT_TEST
 #include <gtest/gtest_prod.h>
 #endif
@@ -100,17 +102,31 @@ public:
      * @param len The length of the raw data
      */
 
-    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len);
+    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
-    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len);
+    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
     std::vector<uint32_t> getKnownNodeIDs() const;
     std::vector<uint32_t> getKnownUserIDs() const;
 
+    void setGatewayManager(GatewayManager *g) { _gwMgr = g; }
+
+    // TODO: add mutex to these calls.
+    bool haveGateway() const;
+    bool isGateway(uint32_t n) const;
+
 private:
+    /*
+    WARNING!!!!!!!!!!!!!
+
+    TWO Mutexes that are some times dependant on each other. ALWAYS lock _gwMutex first then _mutex
+    */
     SemaphoreHandle_t _mutex;
+    SemaphoreHandle_t _gwMtx;
+    uint32_t _closestGw = 0;
+    uint8_t _closestHops = 0xFF;
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
     UserSessionManager *_usm;
@@ -121,6 +137,8 @@ private:
     MQTTManager *_mqttManager;
 
     IClientNotifier *_clientNotifier;
+
+    GatewayManager *_gwMgr = nullptr;
 
     struct Lock
     {
@@ -163,6 +181,9 @@ private:
 
     // Neighbour bloom filter info
     std::unordered_map<uint32_t, NeighInfo> _nbrBloom; /* nodeID → bloom */
+
+    // Gateways
+    std::unordered_set<uint32_t> _gateways;
 
     // Timers
 
@@ -347,6 +368,24 @@ private:
 
     void flushUserRouteBuffer(uint32_t nodeID);
 
+    void recomputeClosestGateway();
+
+    inline void addGateway(uint32_t nodeID)
+    {
+        Lock l(_gwMtx);
+        bool inserted = _gateways.insert(nodeID).second;
+        if (inserted)
+            recomputeClosestGateway();
+    }
+
+    inline void removeGateway(uint32_t nodeID)
+    {
+        Lock l(_gwMtx);
+        bool erased = _gateways.erase(nodeID);
+        if (erased && nodeID == _closestGw) // lost the best one
+            recomputeClosestGateway();
+    }
+
     inline void addUserMessage(uint32_t userID, const userMessageBufferEntry &entry)
     {
         Lock lock(_mutex);
@@ -378,6 +417,7 @@ private:
     {
         Lock lock(_mutex);
         _gut[userID] = entry;
+        Serial.printf("Added user: %u", userID);
     }
 
     inline bool getGutEntry(uint32_t userID, GutEntry &out) const

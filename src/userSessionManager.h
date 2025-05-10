@@ -9,6 +9,8 @@
 #include "freertos/semphr.h"
 #include "set"
 
+class MQTTManager;
+
 // Special value indicating no active BLE connection
 static const uint16_t INVALID_HANDLE = 0xFFFF;
 
@@ -18,12 +20,31 @@ struct UserInfo
     uint16_t bleConnHandle; // INVALID_HANDLE if not connected
     bool isConnected;
     unsigned long lastSeen; // millis() timestamp of last activity
+    //TODO storage per user of messages
 };
 
+/**
+ * @brief The UserSessionManager is used to manage sessions for users connected via bluetooth. NOT Global user list that is kept in the GUT within router
+ * Read preferring reader-writer mutex
+ *
+ * IMPORTANT!!!!
+ *
+ * The USM uses a reader-writer lock (read preferring) built from two binary (non-recursive) mutexes
+ * Therefore, any task that holds the _writeMutex then entered any of the USM API functions without releasing
+ * the _writeMutex will DEADLOCK.
+ *
+ * Example:
+ * void someFunc{
+ *   _usm.addOrRefresh(...);// <- takes write-lock 
+ *   _usm.isOnline(...); // <- would try and take the write-lock again as part of a read
+ * }
+ * 
+ * So if you’re still holding _writeMutex from the preceding addOrRefresh()’s writeLock(), then readLock() dead-locks when it tries to take _writeMutex again.
+ */
 class UserSessionManager
 {
 public:
-    UserSessionManager();
+    UserSessionManager(MQTTManager *mqttManager);
     ~UserSessionManager();
     // Register or refresh a user's session on BLE connect/auth
     // Could block on mutex!! - need to handle this
@@ -48,9 +69,13 @@ public:
     // Retrieve a snapshot of all known users
     std::vector<UserInfo> allUsers() const;
 
+    std::vector<uint32_t> getConnectedUsers();
+
     /// Call this to grab everything that’s been added/removed since
     /// the last time you called getAndClearDiff().
     void getAndClearDiff(std::vector<uint32_t> &added, std::vector<uint32_t> &removed);
+
+    void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
 private:
     // Reader-writer lock implementation
@@ -60,6 +85,8 @@ private:
 
     std::set<uint32_t> _diffAdded;
     std::set<uint32_t> _diffRemoved;
+
+    MQTTManager *_mqttManager;
 
     void readLock() const
     {

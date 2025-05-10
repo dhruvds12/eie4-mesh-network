@@ -20,6 +20,7 @@ extern "C"
 static const uint8_t ACTION_MESSAGE = 0x01;
 static const uint8_t ACTION_UPDATE_ROUTE = 0x02;
 static const uint8_t ACTION_INVALIDATE_ROUTE = 0x03;
+static const uint8_t ACTION_USER_ADDED = 0x04;
 
 #define REGISTRATION_TOPIC "simulation/register"
 
@@ -50,6 +51,7 @@ public:
     void publishUpdateRoute(uint32_t dest, uint32_t nextHop, uint8_t hopCount);
     void publishInvalidateRoute(uint32_t dest);
     void publishPacket(uint32_t packetID, const uint8_t *buffer, size_t length);
+    void publishUserAdded(uint32_t userID);
 
 private:
     const char *brokerURI;

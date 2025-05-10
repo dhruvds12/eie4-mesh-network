@@ -18,10 +18,21 @@ enum PacketType : uint8_t
     PKT_BROADCAST = 0x05,
     PKT_BROADCAST_INFO = 0x06,
     PKT_ACK = 0x07,
+    PKT_GATEWAY = 0x08, // Used to inform nodes that I have now got internet connection
+    // .......
     PKT_UREQ = 0x0F,
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
+    //TODO new packet type for long range + multihop participation broadcast!!! 
+
+};
+
+enum flags : uint8_t
+{
+    FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
+    TO_GATEWAY = 0x02,
+    I_AM_GATEWAY = 0x03
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
