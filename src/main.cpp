@@ -87,8 +87,6 @@ void setup()
                              btManager,
                              aodvRouter);
   gwMgr->begin();
-  networkMessageHandler->setGatewayManager(gwMgr);
-  aodvRouter->setGatewayManager(gwMgr);
 
   // aodvRouter->getKnownUserIDs();
 

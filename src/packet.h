@@ -32,6 +32,7 @@ enum flags : uint8_t
 {
     FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
     TO_GATEWAY = 0x02,
+    I_AM_GATEWAY = 0x03
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;

@@ -29,6 +29,8 @@ public:
     void onWifiUp();
     void onWifiDown();
 
+    bool isOnline() const;
+
 private:
     struct UplinkMsg
     {

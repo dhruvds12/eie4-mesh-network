@@ -113,6 +113,10 @@ public:
 
     void setGatewayManager(GatewayManager *g) { _gwMgr = g; }
 
+    // TODO: add mutex to these calls.
+    bool haveGateway() const        { return !_gateways.empty(); }
+    bool isGateway(uint32_t n)const { return _gateways.count(n); }
+
 private:
     SemaphoreHandle_t _mutex;
     IRadioManager *_radioManager;
@@ -169,6 +173,9 @@ private:
 
     // Neighbour bloom filter info
     std::unordered_map<uint32_t, NeighInfo> _nbrBloom; /* nodeID → bloom */
+
+    // Gateways
+    std::unordered_set<uint32_t> _gateways; 
 
     // Timers
 

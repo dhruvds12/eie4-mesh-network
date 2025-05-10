@@ -80,8 +80,7 @@ void NetworkMessageHandler::processQueue()
                                   strlen(msg.message),
                                   msg.flags);
             }
-            else if (msg.kind == MsgKind::USER ||
-                     msg.kind == MsgKind::FROM_GATEWAY)
+            else if (msg.kind == MsgKind::USER)
             {
                 _router->sendUserMessage(msg.userID,
                                          msg.destID,
@@ -91,9 +90,27 @@ void NetworkMessageHandler::processQueue()
             }
             else if (msg.kind == MsgKind::TO_GATEWAY && _gwMgr)
             {
-                Serial.print("Sent message to uplink\n");
-                // forward to GatewayManager queue – never touches the radio here
-                _gwMgr->uplink(msg.userID, msg.destID, msg.message);
+                if (_gwMgr->isOnline())
+                {
+                    Serial.print("Sent message to uplink\n");
+                    // forward to GatewayManager queue – never touches the radio here
+                    _gwMgr->uplink(msg.userID, msg.destID, msg.message);
+                }
+                else
+                {
+                    if (_router->haveGateway())
+                    {
+                        _router->sendUserMessage(msg.userID,
+                                                 msg.destID,
+                                                 reinterpret_cast<const uint8_t *>(msg.message),
+                                                 strlen(msg.message),
+                                                 msg.flags);
+                    }
+                    else
+                    {
+                        Serial.println("Message from user dropped no access to a Gateway");
+                    }
+                }
             }
         }
     }

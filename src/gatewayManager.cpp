@@ -19,6 +19,7 @@ GatewayManager::GatewayManager(const char *url,
 void GatewayManager::begin()
 {
     _nmh->setGatewayManager(this);
+    _router->setGatewayManager(this);
     // TODO: DO these need to be pinned to core 1
     xTaskCreate(syncTask, "GW-SYNC", 8192, this, 1, nullptr);
     xTaskCreate(
@@ -47,6 +48,11 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
 
     /* enqueue immediately, no block if queue is full */
     xQueueSend(_txQ, &m, 0);
+}
+
+bool GatewayManager::isOnline() const 
+{
+    return _registered && (xEventGroupGetBits(_evt) & WIFI_READY);
 }
 
 void GatewayManager::onWifiUp()
@@ -211,7 +217,7 @@ bool GatewayManager::oneSync()
             }
             else
             {
-                //TODO store in the userInfo
+                // TODO store in the userInfo
             }
         }
         else
