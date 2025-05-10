@@ -114,11 +114,19 @@ public:
     void setGatewayManager(GatewayManager *g) { _gwMgr = g; }
 
     // TODO: add mutex to these calls.
-    bool haveGateway() const        { return !_gateways.empty(); }
-    bool isGateway(uint32_t n)const { return _gateways.count(n); }
+    bool haveGateway() const;
+    bool isGateway(uint32_t n) const;
 
 private:
+    /*
+    WARNING!!!!!!!!!!!!!
+
+    TWO Mutexes that are some times dependant on each other. ALWAYS lock _gwMutex first then _mutex
+    */
     SemaphoreHandle_t _mutex;
+    SemaphoreHandle_t _gwMtx;
+    uint32_t _closestGw = 0;
+    uint8_t _closestHops = 0xFF;
     IRadioManager *_radioManager;
     uint32_t _myNodeID;
     UserSessionManager *_usm;
@@ -175,7 +183,7 @@ private:
     std::unordered_map<uint32_t, NeighInfo> _nbrBloom; /* nodeID → bloom */
 
     // Gateways
-    std::unordered_set<uint32_t> _gateways; 
+    std::unordered_set<uint32_t> _gateways;
 
     // Timers
 
@@ -359,6 +367,24 @@ private:
     void removeItemRoutingTable(uint32_t ID);
 
     void flushUserRouteBuffer(uint32_t nodeID);
+
+    void recomputeClosestGateway();
+
+    inline void addGateway(uint32_t nodeID)
+    {
+        Lock l(_gwMtx);
+        bool inserted = _gateways.insert(nodeID).second;
+        if (inserted)
+            recomputeClosestGateway();
+    }
+
+    inline void removeGateway(uint32_t nodeID)
+    {
+        Lock l(_gwMtx);
+        bool erased = _gateways.erase(nodeID);
+        if (erased && nodeID == _closestGw) // lost the best one
+            recomputeClosestGateway();
+    }
 
     inline void addUserMessage(uint32_t userID, const userMessageBufferEntry &entry)
     {

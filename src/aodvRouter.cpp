@@ -10,6 +10,10 @@ AODVRouter::AODVRouter(IRadioManager *radioManager, MQTTManager *MQTTManager, ui
     // Creates recursive mutex
     _mutex = xSemaphoreCreateRecursiveMutex();
     configASSERT(_mutex);
+
+    // Create gatway structs mutex
+    _gwMtx = xSemaphoreCreateRecursiveMutex();
+    configASSERT(_gwMtx);
 }
 
 // TODO: can the ifdef be removed?
@@ -351,54 +355,47 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
 {
     Serial.printf("Creating user message to %u from %u\n", toUserID, fromUserID);
     // check GUT
-    uint32_t nextHopID;
-    uint32_t destNodeID;
+    uint32_t nextHopID = 0;
+    uint32_t destNodeID = 0;
     if (flags == TO_GATEWAY)
     {
-        uint8_t bestHops = 0xFF;
-        RouteEntry bestRe{};
 
-        // TODO: Gonna need a mutex here
-        // OR -> on add to gateway recalc the closest gateway 
-        //    -> on remove check it is NOT closest gateway if so redo closest gateway calc
-        for (uint32_t gw : _gateways) // _gateways set added earlier
+        if (_gateways.empty())
         {
-            RouteEntry re;
-            if (!getRoute(gw, re)) // no route yet – skip
-                continue;
+            Serial.println("[AODV] no gateways known – drop / buffer?  ---> this should not happen (the app should not allow a gateway message)");
+            return;
+        }
 
-            if (re.hopcount < bestHops)
+        {
+            Lock l(_gwMtx);
+            destNodeID = _closestGw;
+            // if gw == 0 (strange behaviour) just take the first element from the gateway unordered map
+            if (destNodeID == 0)
             {
-                bestHops = re.hopcount;
-                bestRe = re;
-                destNodeID = gw; // remember which GW we chose
+                destNodeID = *_gateways.begin();
             }
         }
 
-        if (bestHops == 0xFF)
+        RouteEntry re;
+        // get the route to the gw -> if there is no route initiate the addPendingUserRouteMessage + sendRREQ
+        if (!getRoute(destNodeID, re))
         {
             /* No usable route to any gateway –
                buffer the message and start a route-request to the
                *numerically* first gateway we know about                */
-            if (_gateways.empty())
-            {
-                Serial.println("[AODV] no gateways known – drop / buffer?");
-                return;
-            }
 
-            uint32_t gw = *_gateways.begin(); // first element
             uint8_t *copy = (uint8_t *)pvPortMalloc(len);
             if (!copy)
                 return; // OOM
             memcpy(copy, message, len);
 
             PendingUserRouteEntry ent{fromUserID, toUserID, copy, len};
-            addPendingUserRouteMessage(gw, ent);
-            sendRREQ(gw); // try to discover a route
+            addPendingUserRouteMessage(destNodeID, ent);
+            sendRREQ(destNodeID); // try to discover a route
             return;
         }
 
-        nextHopID = bestRe.nextHop;
+        nextHopID = re.nextHop;
     }
     else
     {
@@ -443,12 +440,18 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
         nextHopID = re.nextHop;
     }
 
+    if (nextHopID == 0 || destNodeID == 0)
+    {
+        Serial.println("[AODVRouter] Error whilst constructing a user to user message --> destNodeID or nextHopID unset - message lost :(");
+        return;
+    }
+
     BaseHeader bh;
     bh.destNodeID = nextHopID;
     bh.srcNodeID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_USER_MSG;
-    bh.flags = 0; // No flags set ie no ACK etc expected
+    bh.flags = flags; // No flags set ie no ACK etc expected
     bh.hopCount = 0;
     bh.reserved = 0;
 
@@ -798,10 +801,10 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     if (base.flags & I_AM_GATEWAY)
     {
         Serial.println("Found gateway");
-        _gateways.insert(dh.originNodeID);
+        addGateway(dh.originNodeID);
     }
     else
-        _gateways.erase(dh.originNodeID);
+        removeGateway(dh.originNodeID);
 
     Serial.printf("[AODVRouter] Received BroadcastInfo. PayloadLen=%u\n", (unsigned)payloadLen);
     Serial.printf("[AODVRouter] Info: %.*s\n", (int)payloadLen, (const char *)payload);
@@ -1505,6 +1508,39 @@ std::vector<uint32_t> AODVRouter::getKnownUserIDs() const
         users.push_back(kv.first);
     }
     return users;
+}
+
+void AODVRouter::recomputeClosestGateway()
+{
+    uint32_t bestGw = 0;
+    uint8_t bestHops = 0xFF;
+
+    for (uint32_t gw : _gateways)
+    {
+        RouteEntry re;
+        if (!getRoute(gw, re))
+            continue; // no route yet
+        if (re.hopcount < bestHops)
+        {
+            bestHops = re.hopcount;
+            bestGw = gw;
+        }
+    }
+
+    _closestGw = bestGw;
+    _closestHops = bestHops;
+}
+
+bool AODVRouter::haveGateway() const
+{
+    Lock l(_gwMtx);
+    return !_gateways.empty();
+}
+
+bool AODVRouter::isGateway(uint32_t n) const
+{
+    Lock l(_gwMtx);
+    return _gateways.count(n);
 }
 
 /*
