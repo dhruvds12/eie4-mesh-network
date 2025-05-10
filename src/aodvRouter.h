@@ -417,6 +417,7 @@ private:
     {
         Lock lock(_mutex);
         _gut[userID] = entry;
+        Serial.printf("Added user: %u", userID);
     }
 
     inline bool getGutEntry(uint32_t userID, GutEntry &out) const

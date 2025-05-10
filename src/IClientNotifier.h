@@ -28,4 +28,5 @@ class IClientNotifier
 public:
     virtual ~IClientNotifier() = default;
     virtual bool notify(const Outgoing &o) = 0;
+    virtual bool setGatewayState(bool online) = 0;
 };

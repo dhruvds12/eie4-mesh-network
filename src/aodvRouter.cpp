@@ -806,6 +806,16 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     else
         removeGateway(dh.originNodeID);
 
+    if (haveGateway())
+    {
+        // inform ble connections
+        _clientNotifier->setGatewayState(true);
+    }
+    else
+    {
+        _clientNotifier->setGatewayState(false);
+    }
+
     Serial.printf("[AODVRouter] Received BroadcastInfo. PayloadLen=%u\n", (unsigned)payloadLen);
     Serial.printf("[AODVRouter] Info: %.*s\n", (int)payloadLen, (const char *)payload);
 
@@ -886,7 +896,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
             Serial.println("[AODVRouter] Received gateway user message");
             Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
             Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
-            _clientNotifier->notify(Outgoing{BleType::BLE_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen});
+            _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
         }
         Serial.println("[AODVRouter] Entered I am receiver path User Message");

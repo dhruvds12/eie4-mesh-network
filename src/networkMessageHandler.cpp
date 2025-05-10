@@ -80,7 +80,7 @@ void NetworkMessageHandler::processQueue()
                                   strlen(msg.message),
                                   msg.flags);
             }
-            else if (msg.kind == MsgKind::USER)
+            else if (msg.kind == MsgKind::USER || msg.kind == MsgKind::FROM_GATEWAY)
             {
                 _router->sendUserMessage(msg.userID,
                                          msg.destID,

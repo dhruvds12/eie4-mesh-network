@@ -50,7 +50,7 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
     xQueueSend(_txQ, &m, 0);
 }
 
-bool GatewayManager::isOnline() const 
+bool GatewayManager::isOnline() const
 {
     return _registered && (xEventGroupGetBits(_evt) & WIFI_READY);
 }
@@ -143,6 +143,7 @@ bool GatewayManager::oneSync()
     Serial.println("requesting build seen");
     buildSeen(aSeen);
     Serial.println("Received build seen");
+    Serial.printf("Seen: %s", aSeen);
 
     // UPLINK msgs
     JsonArray aUp = req["uplink"].to<JsonArray>();
@@ -222,7 +223,7 @@ bool GatewayManager::oneSync()
         }
         else
         {
-
+            Serial.printf("Received gatewat message for user %u\n", dst);
             _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
                                  dst,
                                  txt,
