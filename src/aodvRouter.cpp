@@ -1282,6 +1282,11 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
             if (getRoute(header.destNodeID, re))
             {
                 // Store a copy of the packet along with its metadata.
+                // TODO: Also store packet type
+                // New way of doing ack is check for ack header then add to the map if we fail to transmit 3 times go back to sender with rerr.
+                // This should avoid unnecessary traffic
+                // Instead of storing in transmitt this function could be moved just before transmit packet is called in other functions
+                // this provides the ack with more info such as type without having to add functionality to transmit packet.
                 storeAckPacket(header.packetID, buffer, offset, re.nextHop);
             }
             // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken
