@@ -130,6 +130,14 @@ void BluetoothManager::bleTxWorker(void *pv)
                 mgr->queueGatewayStatus(online); // call the old helper here
                 break;
             }
+            case BleType::BLE_ACK:
+            {
+                Serial.println("Sending ack");
+                raw = mgr->encodeAck(pkt->pktId);
+                mgr->sendToClient(pkt->connHandle, raw);
+                break;
+            }
+
             default:
                 break;
             }
@@ -262,16 +270,39 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     uint8_t raw = data[0];
     auto type = static_cast<BLEMessageType>(raw);
 
-    uint32_t dest = uint32_t(data[1]) | (uint32_t(data[2]) << 8) | (uint32_t(data[3]) << 16) | (uint32_t(data[4]) << 24);
-    uint32_t sender = uint32_t(data[5]) | (uint32_t(data[6]) << 8) | (uint32_t(data[7]) << 16) | (uint32_t(data[8]) << 24);
+    size_t idx = 1;
+    uint32_t pktId = 0;
 
-    // remaining bytes are the UTF-8 payload
-    std::string body;
-    if (msg.size() > 9)
+    auto hasPkt = (type == NODE_MSG ||
+                   type == USER_MSG ||
+                   type == USER_MSG_GATEWAY ||
+                   type == BROADCAST);
+
+    if (hasPkt)
     {
-        body.assign(reinterpret_cast<const char *>(data + 9),
-                    msg.size() - 9);
+        if (msg.size() < 13)
+        {
+            Serial.println("pkt too short");
+            return;
+        }
+        pktId = uint32_t(data[1]) | (uint32_t(data[2]) << 8) |
+                (uint32_t(data[3]) << 16) | (uint32_t(data[4]) << 24);
+        idx += 4;
     }
+
+    if (msg.size() < idx + 8)
+    {
+        Serial.println("pkt too short");
+        return;
+    }
+
+    uint32_t dest = uint32_t(data[idx]) | (uint32_t(data[idx + 1]) << 8) | (uint32_t(data[idx + 2]) << 16) | (uint32_t(data[idx + 3]) << 24);
+    uint32_t sender = uint32_t(data[idx + 4]) | (uint32_t(data[idx + 5]) << 8) | (uint32_t(data[idx + 6]) << 16) | (uint32_t(data[idx + 7]) << 24);
+    idx += 8;
+
+    std::string body;
+    if (msg.size() > idx)
+        body.assign(reinterpret_cast<const char *>(data + idx), msg.size() - idx);
 
     switch (type)
     {
@@ -326,10 +357,23 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     break;
 
     case NODE_MSG:
+    {
         // destA = target nodeID
         Serial.printf("Node_msg for %u from %u\n", dest, sender);
         _netHandler->enqueueMessage(MsgKind::NODE, dest, body.c_str());
-        break;
+
+        // Need to send the message back to the node as well for other users connected to see
+        // TODO: this means that sender will get the message back. --> either phone needs to discard or we never send it to the phone
+        std::vector<uint8_t> payload(body.begin(), body.end());
+        auto pkt = new BleOut{
+            BleType::BLE_Node,
+            0,
+            sender, // swapped so that the phone accepts the message correctly
+            dest,   // swapped so that the phone accepts the message correctly
+            std::move(payload)};
+        enqueueBleOut(pkt);
+    }
+    break;
 
     case USER_MSG:
     {
@@ -338,10 +382,27 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         {
 
             _netHandler->enqueueMessage(MsgKind::USER, dest, body.c_str(), sender);
-        }
-        else
-        {
-            Serial.println("Did not recognise sender");
+
+            if (pktId)
+            {
+                // TODO remove this is just a test
+                if (pktId)
+                { // only if phone supplied one
+                    auto ackPkt = new BleOut{
+                        BleType::BLE_ACK,
+                        connHandle, // back to the same phone
+                        0,
+                        0,    // unused
+                        {},   // no payload
+                        pktId // <-- the 32-bit id
+                    };
+                    enqueueBleOut(ackPkt);
+                }
+            }
+            else
+            {
+                Serial.println("Did not recognise sender");
+            }
         }
     }
     break;
@@ -397,17 +458,21 @@ std::vector<uint8_t> BluetoothManager::encodeListResponse(BLEMessageType type, c
     return pkt;
 }
 
-std::string BluetoothManager::encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload)
+std::string BluetoothManager::encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload, uint32_t pktId)
 {
     std::string pkt;
-    pkt.reserve(1 + 4 + 4 + payload.size());
+    pkt.reserve(1 + 4 + 4 + 4 + payload.size());
+
     pkt.push_back(static_cast<char>(type));
 
-    for (int b = 0; b < 4; ++b)
-        pkt.push_back(static_cast<char>((to >> (8 * b)) & 0xFF));
+    for (int b = 0; b < 4; ++b) // pkt-id
+        pkt.push_back(char((pktId >> (8 * b)) & 0xFF));
 
-    for (int b = 0; b < 4; ++b)
-        pkt.push_back(static_cast<char>((from >> (8 * b)) & 0xFF));
+    for (int b = 0; b < 4; ++b) // dest
+        pkt.push_back(char((to >> (8 * b)) & 0xFF));
+
+    for (int b = 0; b < 4; ++b) // sender
+        pkt.push_back(char((from >> (8 * b)) & 0xFF));
 
     pkt.insert(pkt.end(), payload.begin(), payload.end());
     return pkt;
@@ -470,4 +535,14 @@ void BluetoothManager::queueGatewayStatus(bool online)
         enqueueBleOut(pkt);
     }
     xSemaphoreGive(_connectedDevicesMutex);
+}
+
+std::string BluetoothManager::encodeAck(uint32_t pktId)
+{
+    std::string p;
+    p.reserve(1 + 4);
+    p.push_back(char(ACK_SUCCESS));
+    for (int i = 0; i < 4; ++i)
+        p.push_back(char((pktId >> (8 * i)) & 0xFF));
+    return p;
 }
