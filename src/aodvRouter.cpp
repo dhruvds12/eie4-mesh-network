@@ -268,7 +268,7 @@ void AODVRouter::cleanupAckBuffer()
 
             // Trigger a Route Error message for the unacknowledged packet.
             // Here, we assume the broken node is the expected next hop.
-            sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, dataHdr.finalDestID, baseHdr.packetID);
+            sendRERR(abe.expectedNextHop, dataHdr.originNodeID, dataHdr.finalDestID, baseHdr.packetID);
         }
         else if (baseHdr.packetType == PKT_RREP)
         {
@@ -347,6 +347,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len, 
 
     DATAHeader dh;
     dh.finalDestID = destNodeID;
+    dh.originNodeID = _myNodeID; // NEW
 
     transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), data, len);
 }
@@ -459,6 +460,7 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
     umh.fromUserID = fromUserID;
     umh.toUserID = toUserID;
     umh.toNodeID = destNodeID;
+    umh.originNodeID = _myNodeID;
 
     Serial.printf(
         "Creating user to user message: from user %u to user %u (node %u)\n",
@@ -736,11 +738,12 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.srcNodeID, actualData, actualDataLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, dataHeader.originNodeID, actualData, actualDataLen});
         return;
     }
 
     BaseHeader fwd = base;
+    fwd.srcNodeID = _myNodeID;
     if (dataHeader.finalDestID == BROADCAST_ADDR)
     {
         // TODO: need to stop the broadcast at some point
@@ -759,7 +762,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         {
             Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
             // special case where node self reports broken link therefore brokenNodeID == originNodeID
-            sendRERR(_myNodeID, base.srcNodeID, dataHeader.finalDestID, base.packetID);
+            sendRERR(_myNodeID, dataHeader.originNodeID, dataHeader.finalDestID, base.packetID);
             // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
             return;
         }
@@ -913,13 +916,14 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     {
         Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", umh.toNodeID);
         // special case where node self reports broken link therefore brokenNodeID == originNodeID
-        sendRERR(_myNodeID, base.srcNodeID, umh.toNodeID, base.packetID);
+        sendRERR(_myNodeID, umh.originNodeID, umh.toNodeID, base.packetID);
         // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
         return;
     }
     Serial.println("[AODVRouter] Forwading Data");
 
     BaseHeader fwd = base;
+    fwd.srcNodeID = _myNodeID;
     fwd.destNodeID = re.nextHop;
     fwd.hopCount++;
     fwd.packetType = PKT_USER_MSG;
@@ -1197,6 +1201,7 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
 
             DATAHeader dh;
             dh.finalDestID = destNodeID;
+            dh.originNodeID = _myNodeID;
 
             transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), pending.data, pending.length);
             // Free the memory after transmitting.

@@ -24,7 +24,7 @@ enum PacketType : uint8_t
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
-    //TODO new packet type for long range + multihop participation broadcast!!! 
+    // TODO new packet type for long range + multihop participation broadcast!!!
 
 };
 
@@ -32,7 +32,8 @@ enum flags : uint8_t
 {
     FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
     TO_GATEWAY = 0x02,
-    I_AM_GATEWAY = 0x03
+    I_AM_GATEWAY = 0x03,
+    REQ_ACK = 0x04
 };
 
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
@@ -88,7 +89,8 @@ struct ACKHeader
 // Extended header for DATA (4 bytes)
 struct DATAHeader
 {
-    uint32_t finalDestID; // 4 bytes: final intended target
+    uint32_t finalDestID;  // 4 bytes: final intended target
+    uint32_t originNodeID; // 4 bytes: oringal sender
 };
 
 struct BROADCASTINFOHeader
@@ -133,6 +135,7 @@ struct UserMsgHeader
     uint32_t fromUserID;
     uint32_t toUserID;
     uint32_t toNodeID;
+    uint32_t originNodeID;
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -286,12 +289,16 @@ inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_
 {
     memcpy(buffer + offset, &data.finalDestID, 4);
     offset += 4;
+    memcpy(buffer + offset, &data.originNodeID, 4);
+    offset += 4;
     return offset;
 }
 
 inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, size_t offset)
 {
     memcpy(&data.finalDestID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&data.originNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }
@@ -408,6 +415,9 @@ inline size_t serialiseUserMsgHeader(const UserMsgHeader &header, uint8_t *buffe
     offset += 4;
     memcpy(buffer + offset, &header.toNodeID, 4);
     offset += 4;
+    memcpy(buffer + offset, &header.originNodeID, 4);
+    offset += 4;
+
     return offset;
 }
 
@@ -418,6 +428,8 @@ inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &hea
     memcpy(&header.toUserID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.toNodeID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }
