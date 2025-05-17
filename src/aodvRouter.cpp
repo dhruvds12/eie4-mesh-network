@@ -224,60 +224,138 @@ void AODVRouter::sendBroadcastInfo()
     Serial.println("Send broadcastInfo");
 }
 
+// void AODVRouter::cleanupAckBuffer()
+// {
+//     struct Expired
+//     {
+//         ackBufferEntry entry;
+//         uint32_t packetID;
+//     };
+//     // Create a temporary list of packetIDs to remove.
+//     std::vector<Expired> expired;
+//     {
+//         Lock l(_mutex);
+//         TickType_t now = xTaskGetTickCount();
+//         for (auto it = ackBuffer.begin(); it != ackBuffer.end();)
+//         {
+//             if (now - it->second.timestamp >= ACK_TIMEOUT_TICKS)
+//             {
+//                 expired.push_back({it->second, it->first});
+//                 it = ackBuffer.erase(it);
+//             }
+//             else
+//             {
+//                 ++it;
+//             }
+//         }
+//     }
+
+//     // Process all expired entries.
+//     for (auto &e : expired)
+//     {
+//         // Retrieve the stored ack entry.
+//         ackBufferEntry &abe = e.entry;
+
+//         // Deserialize the BaseHeader from the stored packet.
+//         BaseHeader baseHdr;
+//         size_t offset = deserialiseBaseHeader(abe.packet, baseHdr);
+
+//         // Handle DATA packets (you can add similar logic for other packet types)
+//         if (baseHdr.packetType == PKT_DATA)
+//         {
+//             DATAHeader dataHdr;
+//             offset = deserialiseDATAHeader(abe.packet, dataHdr, offset);
+
+//             // Trigger a Route Error message for the unacknowledged packet.
+//             // Here, we assume the broken node is the expected next hop.
+//             sendRERR(abe.expectedNextHop, dataHdr.originNodeID, dataHdr.finalDestID, baseHdr.packetID);
+//         }
+//         else if (baseHdr.packetType == PKT_RREP)
+//         {
+//             // For RREP packets, extract the relevant header information.
+//             RREPHeader rrep;
+//             memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
+//             sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
+//         }
+//         vPortFree(abe.packet);
+//     }
+// }
+
 void AODVRouter::cleanupAckBuffer()
 {
-    struct Expired
+    TickType_t now = xTaskGetTickCount();
+
+    /*  Entries that exceeded the retry budget get *moved* here (so we can
+        access the packet afterwards without holding the mutex).            */
+    std::vector<std::pair<uint32_t, ackBufferEntry>> expired;
+
     {
-        ackBufferEntry entry;
-        uint32_t packetID;
-    };
-    // Create a temporary list of packetIDs to remove.
-    std::vector<Expired> expired;
-    {
-        Lock l(_mutex);
-        TickType_t now = xTaskGetTickCount();
+        Lock l(_mutex);          // ── shortest possible critical section
+
         for (auto it = ackBuffer.begin(); it != ackBuffer.end();)
         {
-            if (now - it->second.timestamp >= ACK_TIMEOUT_TICKS)
+            ackBufferEntry &ent = it->second;
+
+            if (now - ent.timestamp < ACK_TIMEOUT_TICKS)
             {
-                expired.push_back({it->second, it->first});
-                it = ackBuffer.erase(it);
+                ++it;            // still waiting
+                continue;
+            }
+
+            if (ent.attempts < MAX_RETRANS)
+            {
+                if (_radioManager->enqueueTxPacket(ent.packet, ent.length))
+                {
+                    ent.timestamp = now;
+                    ++ent.attempts;
+                    Serial.printf("[AODVRouter] Retry via %u for pkt %u (attempt %u)\n",
+                                  ent.expectedNextHop, it->first, ent.attempts);
+                }
+                ++it;
             }
             else
             {
-                ++it;
+                /*  Move the entry *out* of the map so we can use it after the
+                    lock — no copy of the packet buffer is made.            */
+                expired.emplace_back(it->first, std::move(ent));
+                it = ackBuffer.erase(it);
             }
         }
-    }
+    }   // ── mutex released here ───────────────────────────────────────────
 
-    // Process all expired entries.
-    for (auto &e : expired)
+    /*  Now safe to do heavier work: craft RERRs and free memory.            */
+    for (auto &kv : expired)
     {
-        // Retrieve the stored ack entry.
-        ackBufferEntry &abe = e.entry;
+        uint32_t        pid = kv.first;
+        ackBufferEntry &ent = kv.second;
 
-        // Deserialize the BaseHeader from the stored packet.
-        BaseHeader baseHdr;
-        size_t offset = deserialiseBaseHeader(abe.packet, baseHdr);
+        Serial.printf("[AODVRouter] Retries exhausted for pkt %u – sending RERR\n", pid);
 
-        // Handle DATA packets (you can add similar logic for other packet types)
-        if (baseHdr.packetType == PKT_DATA)
+        BaseHeader bh;
+        deserialiseBaseHeader(ent.packet, bh);
+
+        switch (bh.packetType)
         {
-            DATAHeader dataHdr;
-            offset = deserialiseDATAHeader(abe.packet, dataHdr, offset);
-
-            // Trigger a Route Error message for the unacknowledged packet.
-            // Here, we assume the broken node is the expected next hop.
-            sendRERR(abe.expectedNextHop, dataHdr.originNodeID, dataHdr.finalDestID, baseHdr.packetID);
-        }
-        else if (baseHdr.packetType == PKT_RREP)
+        case PKT_DATA:
         {
-            // For RREP packets, extract the relevant header information.
-            RREPHeader rrep;
-            memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
-            sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
+            DATAHeader dh;
+            deserialiseDATAHeader(ent.packet, dh, sizeof(BaseHeader));
+            sendRERR(_myNodeID, dh.originNodeID, dh.finalDestID, pid);
+            break;
         }
-        vPortFree(abe.packet);
+        case PKT_USER_MSG:
+        {
+            UserMsgHeader uh;
+            deserialiseUserMsgHeader(ent.packet, uh, sizeof(BaseHeader));
+            sendRERR(_myNodeID, uh.originNodeID, uh.toNodeID, pid);
+            break;
+        }
+
+        default:
+            break;
+        }
+
+        vPortFree(ent.packet);   // finally release the buffer
     }
 }
 
@@ -534,6 +612,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         break;
     case PKT_ACK:
         Serial.println("Received ACK");
+        handleACK(bh, payload, payloadLen);
         break;
     case PKT_UERR:
         handleUERR(bh, payload, payloadLen);
@@ -732,6 +811,12 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
     const uint8_t *actualData = payload + sizeof(DATAHeader);
     size_t actualDataLen = payloadLen - sizeof(DATAHeader);
 
+    if (base.flags & REQ_ACK)
+    {
+        // Per-hop explicit ACK to the previous hop
+        sendACK(base.srcNodeID, base.packetID);
+    }
+
     if (_myNodeID == dataHeader.finalDestID)
     {
         Serial.println("[AODVRouter] Entered I am receiver path");
@@ -883,6 +968,12 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
 
     const uint8_t *message = payload + offset;
     size_t messageLen = payloadLen - offset;
+
+    if (base.flags & REQ_ACK)
+    {
+        // Per-hop explicit ACK to the previous hop
+        sendACK(base.srcNodeID, base.packetID);
+    }
 
     if ((_myNodeID == umh.toNodeID) && (base.flags & TO_GATEWAY))
     {
@@ -1050,6 +1141,22 @@ void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size
 
     transmitPacket(fwdBase, (uint8_t *)&uerr, sizeof(UERRHeader));
 }
+
+void AODVRouter::handleACK(const BaseHeader &base, const uint8_t *payload, size_t payloadLen)
+{
+    if (payloadLen < sizeof(ACKHeader))
+    {
+        Serial.println("[AODVRouter] ACK payload too small");
+        return;
+    }
+
+    ACKHeader ah;
+    memcpy(&ah, payload, sizeof(ACKHeader));
+
+    // Remove the matching pending tx (if any)
+    removeFromACKBuffer(ah.originalPacketID);
+}
+
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR
 
 void AODVRouter::sendRREQ(uint32_t destNodeID)
@@ -1170,6 +1277,23 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
     transmitPacket(bh, (uint8_t *)&uerr, sizeof(UERRHeader));
 }
 
+void AODVRouter::sendACK(uint32_t destNodeID, uint32_t originalPacketID)
+{
+    BaseHeader bh{};
+    bh.destNodeID = destNodeID;
+    bh.srcNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_ACK;
+    bh.flags = 0;
+    bh.hopCount = 0;
+    bh.reserved = 0;
+
+    ACKHeader ah{};
+    ah.originalPacketID = originalPacketID;
+
+    transmitPacket(bh, reinterpret_cast<uint8_t *>(&ah), sizeof(ACKHeader));
+}
+
 // DATA BUFFER HELPER FUNCTIONS
 void AODVRouter::flushDataQueue(uint32_t destNodeID)
 {
@@ -1279,8 +1403,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
     else
     {
         // For unicast packets that require an implicit ACK, store a copy in the ackBuffer.
-        if (header.destNodeID != BROADCAST_ADDR &&
-            (header.packetType == PKT_DATA || header.packetType == PKT_RREP))
+        if (header.destNodeID != BROADCAST_ADDR && (header.flags & REQ_ACK))
         {
             RouteEntry re;
             // Get the expected next hop from the routing table.
@@ -1443,7 +1566,8 @@ void AODVRouter::storeAckPacket(uint32_t packetID, const uint8_t *packet, size_t
         packetCopy,
         length,
         expectedNextHop,
-        xTaskGetTickCount()};
+        xTaskGetTickCount(),
+        0};
 }
 
 bool AODVRouter::findAckPacket(uint32_t packetID)

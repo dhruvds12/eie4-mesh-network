@@ -52,6 +52,7 @@ struct ackBufferEntry
     size_t length;
     uint32_t expectedNextHop; // the next hop node you expect to forward the packet
     TickType_t timestamp;     // time when the packet was sent
+    uint8_t attempts;         // number of retransmissions
 };
 
 // per‑user cache entry
@@ -70,6 +71,9 @@ struct NeighInfo
     uint8_t bloom[8];
 };
 
+static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(3000);
+static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
+static const uint8_t MAX_RETRANS = 3;
 static const uint32_t BROADCAST_NOTIFY_BIT = (1u << 0);
 static const uint32_t CLEANUP_NOTIFY_BIT = (1u << 1);
 
@@ -187,9 +191,6 @@ private:
 
     // Timers
 
-    static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000);       // 10 minutes
-    static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
-
     // Functions:
 
     /**
@@ -287,6 +288,8 @@ private:
 
     void handleUserMessage(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
 
+    void handleACK(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
     // SEND PACKET HELPER FUNCTIONS
 
     /**
@@ -320,6 +323,9 @@ private:
     void sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t userID, uint32_t nextHop, uint16_t lifetime, uint8_t hopCount);
 
     void sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeID, uint32_t originalPacketID, uint32_t nextHop);
+
+    void sendACK(uint32_t destNodeID, uint32_t originalPacketID);
+
     /**
      * @brief
      *
