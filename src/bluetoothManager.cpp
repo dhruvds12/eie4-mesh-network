@@ -218,7 +218,19 @@ bool BluetoothManager::sendToClient(uint16_t connHandle, const std::string &mess
 
 bool BluetoothManager::notify(const Outgoing &o)
 {
-    auto pkt = new BleOut{o.type, _userMgr->getBleHandle(o.to), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
+    BleOut *pkt;
+    // only check the bleHandle if it is a user message
+    // else find the 
+    if (o.type == BleType::BLE_USER_GATEWAY || o.type == BleType::BLE_UnicastUser)
+    {
+        pkt = new BleOut{o.type, _userMgr->getBleHandle(o.to), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
+    }
+
+    else
+    {
+        pkt = new BleOut{o.type, uint16_t(0), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
+    }
+
     return enqueueBleOut(pkt);
 }
 
