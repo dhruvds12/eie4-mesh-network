@@ -290,7 +290,7 @@ void AODVRouter::cleanupAckBuffer()
     std::vector<std::pair<uint32_t, ackBufferEntry>> expired;
 
     {
-        Lock l(_mutex);          // ── shortest possible critical section
+        Lock l(_mutex); // ── shortest possible critical section
 
         for (auto it = ackBuffer.begin(); it != ackBuffer.end();)
         {
@@ -298,7 +298,7 @@ void AODVRouter::cleanupAckBuffer()
 
             if (now - ent.timestamp < ACK_TIMEOUT_TICKS)
             {
-                ++it;            // still waiting
+                ++it; // still waiting
                 continue;
             }
 
@@ -321,12 +321,12 @@ void AODVRouter::cleanupAckBuffer()
                 it = ackBuffer.erase(it);
             }
         }
-    }   // ── mutex released here ───────────────────────────────────────────
+    } // ── mutex released here ───────────────────────────────────────────
 
     /*  Now safe to do heavier work: craft RERRs and free memory.            */
     for (auto &kv : expired)
     {
-        uint32_t        pid = kv.first;
+        uint32_t pid = kv.first;
         ackBufferEntry &ent = kv.second;
 
         Serial.printf("[AODVRouter] Retries exhausted for pkt %u – sending RERR\n", pid);
@@ -355,7 +355,7 @@ void AODVRouter::cleanupAckBuffer()
             break;
         }
 
-        vPortFree(ent.packet);   // finally release the buffer
+        vPortFree(ent.packet); // finally release the buffer
     }
 }
 
@@ -663,10 +663,13 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     RouteEntry re;
     if (getRoute(rreq.RREQDestNodeID, re))
     {
-        Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
-        // There is a route to the node, therefore use the entry as the base number of hops
-        sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
-        return;
+        if (re.hopcount >= routeReplyThreshold)
+        {
+            Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
+            // There is a route to the node, therefore use the entry as the base number of hops
+            sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
+            return;
+        }
     }
     Serial.println("[AODVRouter] Forwading RREQ");
 
@@ -1030,6 +1033,7 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
     updateRoute(base.srcNodeID, base.srcNodeID, 1);
     updateRoute(ureq.originNodeID, base.srcNodeID, base.hopCount + 1);
 
+    // Local user
     if (_usm->knowsUser(ureq.userID))
     {
         sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1);
@@ -1037,15 +1041,18 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
     }
 
     GutEntry ge;
+    // know route (non local user)
     if (getGutEntry(ureq.userID, ge))
     {
 
         RouteEntry re;
         if (getRoute(ge.nodeID, re))
         {
-
-            sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1 + re.hopcount);
-            return;
+            if (re.hopcount >= userReplyThreshold)
+            {
+                sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1 + re.hopcount);
+                return;
+            }
         }
     }
 

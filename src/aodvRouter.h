@@ -77,6 +77,10 @@ static const uint8_t MAX_RETRANS = 3;
 static const uint32_t BROADCAST_NOTIFY_BIT = (1u << 0);
 static const uint32_t CLEANUP_NOTIFY_BIT = (1u << 1);
 
+// add the required flags for hop limits
+static const uint8_t routeReplyThreshold = 2;
+static const uint8_t userReplyThreshold = 2;
+
 class AODVRouter : public IRouter
 {
 
