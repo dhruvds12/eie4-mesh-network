@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 /* Network-wide 128-bit key – burn this into flash before shipment.
-   Replace the hex values with your production key.                   */
+   Replace the hex values with production key.                   */
 extern const uint8_t NWK_KEY[16];
 
 /*  Encrypt + authenticate.

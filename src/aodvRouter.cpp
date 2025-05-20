@@ -1468,7 +1468,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
                                 const uint8_t *extHeader, size_t extLen,
                                 const uint8_t *payload, size_t payloadLen)
 {
-    /* ---- 1. build *mutable* header with ENC flag -------------------- */
+    /* ---- build mutable header with ENC flag -------------------- */
     BaseHeader hdrOut = header;
     hdrOut.flags |= FLAG_ENCRYPTED;
 
@@ -1476,7 +1476,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
     size_t offset = 0;
     offset += serialiseBaseHeader(hdrOut, buffer + offset);
 
-    /* ---- 2. marshal plaintext (= extHeader || payload) -------------- */
+    /* ----  marshal plaintext (= extHeader || payload) -------------- */
     uint8_t plain[255];
     size_t plainLen = 0;
 
@@ -1497,7 +1497,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
         return;
     }
 
-    /* ---- 3. encrypt -------------------------------------------------- */
+    /* ----  encrypt -------------------------------------------------- */
     uint8_t nonce[NONCE_LEN];
     buildNonce(hdrOut, nonce);
 
@@ -1515,8 +1515,9 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
 
     offset += plainLen + TAG_LEN; /* final packet length */
 
-    /* ---- 4. hand to radio + bookkeeping (unchanged) ------------------ */
+    /* ---- hand to radio + bookkeeping (unchanged) ------------------ */
     if (_mqttManager && _mqttManager->connected)
+        // TODO: verify is this encrypted
         _mqttManager->publishPacket(hdrOut.packetID, buffer, offset);
 
     if (!_radioManager->enqueueTxPacket(buffer, offset))
