@@ -128,7 +128,7 @@ struct UREQHeader
 
 struct UREPHeader
 {
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t destNodeID;
     uint32_t userID;
     uint16_t lifetime;
@@ -362,8 +362,8 @@ inline size_t deserialiseUREQHeader(const uint8_t *buffer, UREQHeader &header, s
 // ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseUREPHeader(const UREPHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     memcpy(buffer + offset, &header.destNodeID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.userID, 4);
@@ -376,8 +376,8 @@ inline size_t serialiseUREPHeader(const UREPHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseUREPHeader(const uint8_t *buffer, UREPHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.destNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.userID, buffer + offset, 4);

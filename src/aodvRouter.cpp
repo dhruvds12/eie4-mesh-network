@@ -1077,7 +1077,7 @@ void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size
     ge.ts = 0;
     updateGutEntry(urep.userID, ge);
 
-    if (_myNodeID == urep.originNodeID)
+    if (_myNodeID == base.originNodeID)
     {
         if (hasBufferedUserMessages(urep.userID))
         {
@@ -1088,7 +1088,7 @@ void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size
     }
 
     RouteEntry re;
-    if (!getRoute(urep.originNodeID, re))
+    if (!getRoute(base.originNodeID, re))
     {
         Serial.println("[AODVRouter] Got RREP but no route to the origin!");
         return;
@@ -1248,6 +1248,7 @@ void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t u
     BaseHeader bh;
     bh.destNodeID = nextHop;
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = originNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UREP;
     bh.flags = 0;
@@ -1256,7 +1257,6 @@ void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t u
 
     UREPHeader urep;
     urep.destNodeID = destNodeID;
-    urep.originNodeID = originNodeID;
     urep.numHops = hopCount;
     urep.lifetime = lifetime;
     urep.userID = userID;
