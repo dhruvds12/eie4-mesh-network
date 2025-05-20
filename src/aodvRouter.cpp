@@ -814,7 +814,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
     const uint8_t *actualData = payload + sizeof(DATAHeader);
     size_t actualDataLen = payloadLen - sizeof(DATAHeader);
 
-    if (base.flags & REQ_ACK)
+    if (base.flags == REQ_ACK)
     {
         // Per-hop explicit ACK to the previous hop
         sendACK(base.srcNodeID, base.packetID);
@@ -889,7 +889,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
         saveNodeID(dh.originNodeID);
     }
 
-    if (base.flags & I_AM_GATEWAY)
+    if (base.flags == I_AM_GATEWAY)
     {
         Serial.println("Found gateway");
         addGateway(dh.originNodeID);
@@ -972,13 +972,13 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     const uint8_t *message = payload + offset;
     size_t messageLen = payloadLen - offset;
 
-    if (base.flags & REQ_ACK)
+    if (base.flags == REQ_ACK)
     {
         // Per-hop explicit ACK to the previous hop
         sendACK(base.srcNodeID, base.packetID);
     }
 
-    if ((_myNodeID == umh.toNodeID) && (base.flags & TO_GATEWAY))
+    if ((_myNodeID == umh.toNodeID) && (base.flags == TO_GATEWAY))
     {
         if (_gwMgr && _gwMgr->isOnline()) // forward to GatewayManager
             _gwMgr->uplink(umh.fromUserID, umh.toUserID,
@@ -988,7 +988,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
 
     if (_myNodeID == umh.toNodeID)
     {
-        if (base.flags & FROM_GATEWAY)
+        if (base.flags == FROM_GATEWAY)
         {
             Serial.println("[AODVRouter] Received gateway user message");
             Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
@@ -1410,7 +1410,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHead
     else
     {
         // For unicast packets that require an implicit ACK, store a copy in the ackBuffer.
-        if (header.destNodeID != BROADCAST_ADDR && (header.flags & REQ_ACK))
+        if (header.destNodeID != BROADCAST_ADDR && (header.flags == REQ_ACK))
         {
             RouteEntry re;
             // Get the expected next hop from the routing table.
