@@ -773,7 +773,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
             _mqttManager->publishInvalidateRoute(rerr.originalDestNodeID);
     }
 
-    if (_myNodeID == rerr.originNodeID)
+    if (_myNodeID == base.originNodeID)
     {
         // I am the original creator of the message
         Serial.printf("[AODVRouter] Message %u failed to send received RERR.\n", rerr.originalPacketID);
@@ -782,7 +782,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
 
     RouteEntry re;
     // is there a route to the original sender
-    if (!getRoute(rerr.originNodeID, re))
+    if (!getRoute(base.originNodeID, re))
     {
         Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
@@ -1209,6 +1209,7 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t originNodeID, uint32_t
     BaseHeader bh;
     bh.destNodeID = originNodeID; // or unicast to original sender
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = originNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RERR;
     bh.flags = 0;
@@ -1220,7 +1221,6 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t originNodeID, uint32_t
     rerr.brokenNodeID = brokenNodeID;
     rerr.originalDestNodeID = originalDest;
     rerr.originalPacketID = originalPacketID;
-    rerr.originNodeID = originNodeID;
 
     transmitPacket(bh, (uint8_t *)&rerr, sizeof(RERRHeader));
 }

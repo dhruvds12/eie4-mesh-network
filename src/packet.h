@@ -94,7 +94,7 @@ struct RERRHeader
     uint32_t brokenNodeID;       // 4 bytes: Broken nodeID
     uint32_t originalDestNodeID; // 4 bytes: Original intended destination
     uint32_t originalPacketID;   // 4 bytes: Original packetID that will have been overwritten
-    uint32_t originNodeID;       // 4 bytes: The original sender
+    // uint32_t originNodeID;       // 4 bytes: The original sender
 };
 
 // Extended header for ACk (4 bytes)
@@ -259,8 +259,6 @@ inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
     return offset;
 }
 
@@ -273,8 +271,6 @@ inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, s
     memcpy(&header.originalDestNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.originalPacketID, buffer + offset, 4);
-    offset += 4;
-    memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }
