@@ -340,7 +340,7 @@ void AODVRouter::cleanupAckBuffer()
         {
             DATAHeader dh;
             deserialiseDATAHeader(ent.packet, dh, sizeof(BaseHeader));
-            sendRERR(_myNodeID, dh.originNodeID, dh.finalDestID, pid);
+            sendRERR(_myNodeID, bh.originNodeID, dh.finalDestID, pid);
             break;
         }
         case PKT_USER_MSG:
@@ -418,6 +418,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len, 
 
     bh.prevHopID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
+    bh.originNodeID = _myNodeID;            // NEW
     bh.packetType = PKT_DATA;
     bh.flags = flags; // No flags set ie no ACK etc expected
     bh.hopCount = 0;
@@ -425,7 +426,6 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len, 
 
     DATAHeader dh;
     dh.finalDestID = destNodeID;
-    dh.originNodeID = _myNodeID; // NEW
 
     transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), data, len);
 }
@@ -826,7 +826,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, dataHeader.originNodeID, actualData, actualDataLen});
+        _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.originNodeID, actualData, actualDataLen});
         return;
     }
 
@@ -850,7 +850,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         {
             Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", dataHeader.finalDestID);
             // special case where node self reports broken link therefore brokenNodeID == originNodeID
-            sendRERR(_myNodeID, dataHeader.originNodeID, dataHeader.finalDestID, base.packetID);
+            sendRERR(_myNodeID, base.originNodeID, dataHeader.finalDestID, base.packetID);
             // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
             return;
         }
@@ -1170,8 +1170,8 @@ void AODVRouter::sendRREQ(uint32_t destNodeID)
 {
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR;
-    bh.prevHopID = _myNodeID;       // I am the prevHop for now this will be overwritten
-    bh.originNodeID = _myNodeID;    // Person who request the route request
+    bh.prevHopID = _myNodeID;    // I am the prevHop for now this will be overwritten
+    bh.originNodeID = _myNodeID; // Person who request the route request
     bh.packetID = esp_random();
     bh.packetType = PKT_RREQ;
     bh.flags = 0;
@@ -1324,6 +1324,7 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
             BaseHeader bh;
             bh.destNodeID = re.nextHop;
             bh.prevHopID = _myNodeID;
+            bh.originNodeID = _myNodeID;
             bh.packetID = esp_random();
             bh.packetType = PKT_DATA;
             bh.flags = 0;
@@ -1332,7 +1333,6 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
 
             DATAHeader dh;
             dh.finalDestID = destNodeID;
-            dh.originNodeID = _myNodeID;
 
             transmitPacket(bh, (uint8_t *)&dh, sizeof(DATAHeader), pending.data, pending.length);
             // Free the memory after transmitting.

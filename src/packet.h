@@ -107,7 +107,7 @@ struct ACKHeader
 struct DATAHeader
 {
     uint32_t finalDestID;  // 4 bytes: final intended target
-    uint32_t originNodeID; // 4 bytes: oringal sender
+    // uint32_t originNodeID; // 4 bytes: original sender
 };
 
 struct BROADCASTINFOHeader
@@ -301,8 +301,8 @@ inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_
 {
     memcpy(buffer + offset, &data.finalDestID, 4);
     offset += 4;
-    memcpy(buffer + offset, &data.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &data.originNodeID, 4);
+    // offset += 4;
     return offset;
 }
 
@@ -310,8 +310,8 @@ inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, siz
 {
     memcpy(&data.finalDestID, buffer + offset, 4);
     offset += 4;
-    memcpy(&data.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&data.originNodeID, buffer + offset, 4);
+    // offset += 4;
     return offset;
 }
 
