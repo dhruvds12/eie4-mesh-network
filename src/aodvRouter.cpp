@@ -1031,12 +1031,12 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
     deserialiseUREQHeader(payload, ureq, 0);
 
     updateRoute(base.prevHopID, base.prevHopID, 1);
-    updateRoute(ureq.originNodeID, base.prevHopID, base.hopCount + 1);
+    updateRoute(base.originNodeID, base.prevHopID, base.hopCount + 1);
 
     // Local user
     if (_usm->knowsUser(ureq.userID))
     {
-        sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1);
+        sendUREP(base.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1);
         return;
     }
 
@@ -1050,7 +1050,7 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
         {
             if (re.hopcount >= userReplyThreshold)
             {
-                sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1 + re.hopcount);
+                sendUREP(base.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1 + re.hopcount);
                 return;
             }
         }
@@ -1230,6 +1230,7 @@ void AODVRouter::sendUREQ(uint32_t userID)
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR;
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UREQ;
     bh.flags = 0;
@@ -1237,7 +1238,6 @@ void AODVRouter::sendUREQ(uint32_t userID)
     bh.reserved = 0;
 
     UREQHeader ureq;
-    ureq.originNodeID = _myNodeID;
     ureq.userID = userID;
 
     transmitPacket(bh, (uint8_t *)&ureq, sizeof(UREQHeader));

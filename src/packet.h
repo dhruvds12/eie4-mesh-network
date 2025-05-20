@@ -122,7 +122,7 @@ struct DiffBroadcastInfoHeader
 
 struct UREQHeader
 {
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t userID;
 };
 
@@ -340,8 +340,8 @@ inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, DiffBroadcas
 inline size_t serialiseUREQHeader(const UREQHeader &header, uint8_t *buffer, size_t offset)
 {
     // originNodeID
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     // userID
     memcpy(buffer + offset, &header.userID, 4);
     offset += 4;
@@ -350,8 +350,8 @@ inline size_t serialiseUREQHeader(const UREQHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseUREQHeader(const uint8_t *buffer, UREQHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.userID, buffer + offset, 4);
     offset += 4;
     return offset;
