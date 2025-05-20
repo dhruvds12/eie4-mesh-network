@@ -773,7 +773,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
             _mqttManager->publishInvalidateRoute(rerr.originalDestNodeID);
     }
 
-    if (_myNodeID == rerr.senderNodeID)
+    if (_myNodeID == rerr.originNodeID)
     {
         // I am the original creator of the message
         Serial.printf("[AODVRouter] Message %u failed to send received RERR.\n", rerr.originalPacketID);
@@ -782,7 +782,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
 
     RouteEntry re;
     // is there a route to the original sender
-    if (!getRoute(rerr.senderNodeID, re))
+    if (!getRoute(rerr.originNodeID, re))
     {
         Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
@@ -1204,10 +1204,10 @@ void AODVRouter::sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t n
     transmitPacket(bh, (uint8_t *)&rrep, sizeof(RREPHeader));
 }
 
-void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID)
+void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t originNodeID, uint32_t originalDest, uint32_t originalPacketID)
 {
     BaseHeader bh;
-    bh.destNodeID = senderNodeID; // or unicast to original sender
+    bh.destNodeID = originNodeID; // or unicast to original sender
     bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RERR;
@@ -1220,7 +1220,7 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
     rerr.brokenNodeID = brokenNodeID;
     rerr.originalDestNodeID = originalDest;
     rerr.originalPacketID = originalPacketID;
-    rerr.senderNodeID = senderNodeID;
+    rerr.originNodeID = originNodeID;
 
     transmitPacket(bh, (uint8_t *)&rerr, sizeof(RERRHeader));
 }
@@ -1481,7 +1481,7 @@ bool AODVRouter::getRoute(uint32_t destination, RouteEntry &routeEntry)
     return true;
 }
 
-void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t senderNodeID)
+void AODVRouter::invalidateRoute(uint32_t brokenNodeID, uint32_t finalDestNodeID, uint32_t originNodeID)
 {
     std::set<uint32_t> invalidRoute;
     invalidRoute.insert(brokenNodeID);

@@ -42,14 +42,14 @@ static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 // Base Header (16 bytes)
 struct BaseHeader
 {
-    uint32_t destNodeID; // 4 bytes
-    uint32_t prevHopID;  // 4 bytes
-    // uint32_t originNodeID; // 4 bytes
-    uint32_t packetID;  // 4 bytes
-    uint8_t packetType; // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
-    uint8_t flags;      // 1 byte: bitmask for options (e.g., WantAck)
-    uint8_t hopCount;   // 1 byte: TTL/hop count
-    uint8_t reserved;   // 1 byte: reserved
+    uint32_t destNodeID;   // 4 bytes
+    uint32_t prevHopID;    // 4 bytes
+    uint32_t originNodeID; // 4 bytes
+    uint32_t packetID;     // 4 bytes
+    uint8_t packetType;    // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
+    uint8_t flags;         // 1 byte: bitmask for options (e.g., WantAck)
+    uint8_t hopCount;      // 1 byte: TTL/hop count
+    uint8_t reserved;      // 1 byte: reserved
 };
 
 // Extended header for RREQ (8 bytes)
@@ -79,7 +79,7 @@ struct RERRHeader
     uint32_t brokenNodeID;       // 4 bytes: Broken nodeID
     uint32_t originalDestNodeID; // 4 bytes: Original intended destination
     uint32_t originalPacketID;   // 4 bytes: Original packetID that will have been overwritten
-    uint32_t senderNodeID;       // 4 bytes: The original sender
+    uint32_t originNodeID;       // 4 bytes: The original sender
 };
 
 // Extended header for ACk (4 bytes)
@@ -153,6 +153,8 @@ inline size_t serialiseBaseHeader(const BaseHeader &header, uint8_t *buffer)
     offset += 4;
     memcpy(buffer + offset, &header.prevHopID, 4);
     offset += 4;
+    memcpy(buffer + offset, &header.originNodeID, 4);
+    offset += 4;
     memcpy(buffer + offset, &header.packetID, 4);
     offset += 4;
     buffer[offset++] = header.packetType;
@@ -168,6 +170,8 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
     memcpy(&header.destNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.prevHopID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.packetID, buffer + offset, 4);
     offset += 4;
@@ -245,7 +249,7 @@ inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.senderNodeID, 4);
+    memcpy(buffer + offset, &header.originNodeID, 4);
     offset += 4;
     return offset;
 }
@@ -260,7 +264,7 @@ inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, s
     offset += 4;
     memcpy(&header.originalPacketID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.senderNodeID, buffer + offset, 4);
+    memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }
