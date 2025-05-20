@@ -114,7 +114,7 @@ struct DATAHeader
 #pragma pack(push, 1)
 struct DiffBroadcastInfoHeader
 {
-    uint32_t originNodeID; // 4 B
+    // uint32_t originNodeID; // 4 B
     uint16_t numAdded;     // 2 B
     uint16_t numRemoved;   // 2 B
 };
@@ -315,17 +315,22 @@ inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, siz
 // BroadcastInfo
 // ──────────────────────────────────────────────────────────────────────────────
 
-inline size_t serialiseBroadcastInfoHeader(const BROADCASTINFOHeader &data, uint8_t *buffer, size_t offset)
+inline size_t serialiseBroadcastInfoHeader(const DiffBroadcastInfoHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &data.originNodeID, 4);
-    offset += 4;
+
+    memcpy(buffer + offset, &header.numAdded, 2);
+    offset += 2;
+    memcpy(buffer + offset, &header.numRemoved, 2);
+    offset += 2;
     return offset;
 }
 
-inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, BROADCASTINFOHeader &data, size_t offset)
+inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, DiffBroadcastInfoHeader &header, size_t offset)
 {
-    memcpy(&data.originNodeID, buffer + offset, 4);
-    offset += 4;
+    memcpy(&header.numAdded, buffer + offset, 2);
+    offset += 2;
+    memcpy(&header.numRemoved, buffer + offset, 2);
+    offset += 2;
     return offset;
 }
 

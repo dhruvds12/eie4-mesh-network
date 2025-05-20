@@ -148,6 +148,7 @@ void AODVRouter::sendBroadcastInfo()
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR; // Broadcast to all nodes
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_BROADCAST_INFO; // Use broadcast packet type
     bh.flags = 0;
@@ -175,7 +176,6 @@ void AODVRouter::sendBroadcastInfo()
         DiffBroadcastInfoHeader dh;
         dh.numAdded = 0;
         dh.numRemoved = 0;
-        dh.originNodeID = _myNodeID;
 
         transmitPacket(bh, reinterpret_cast<const uint8_t *>(&dh), DIFF_HDR);
     }
@@ -192,7 +192,7 @@ void AODVRouter::sendBroadcastInfo()
             DiffBroadcastInfoHeader dh;
             dh.numAdded = uint16_t(numA);
             dh.numRemoved = uint16_t(numR);
-            dh.originNodeID = _myNodeID;
+            // no longer need the originNode here included in the baseHeader
 
             std::vector<uint8_t> payload;
             payload.reserve((numA + numR) * sizeof(uint32_t));
@@ -884,18 +884,18 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
         saveNodeID(base.prevHopID);
     }
 
-    if (!isNodeIDKnown(dh.originNodeID))
+    if (!isNodeIDKnown(base.originNodeID))
     {
-        saveNodeID(dh.originNodeID);
+        saveNodeID(base.originNodeID);
     }
 
     if (base.flags == I_AM_GATEWAY)
     {
         Serial.println("Found gateway");
-        addGateway(dh.originNodeID);
+        addGateway(base.originNodeID);
     }
     else
-        removeGateway(dh.originNodeID);
+        removeGateway(base.originNodeID);
 
     if (haveGateway())
     {
@@ -914,10 +914,10 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     updateRoute(base.prevHopID, base.prevHopID, 1);
 
     // update route to the originNode
-    if (dh.originNodeID != _myNodeID)
+    if (base.originNodeID != _myNodeID)
     {
 
-        updateRoute(dh.originNodeID, base.prevHopID, base.hopCount + 1);
+        updateRoute(base.originNodeID, base.prevHopID, base.hopCount + 1);
     }
 
     size_t offset = sizeof(DiffBroadcastInfoHeader);
@@ -930,7 +930,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
         offset += sizeof(uid);
 
         GutEntry ge;
-        ge.nodeID = dh.originNodeID;
+        ge.nodeID = base.originNodeID;
         ge.seq = 0; // or carry over if you have per‑user seqnums
         ge.ts = 0;  // timestamp now
         updateGutEntry(uid, ge);
