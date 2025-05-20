@@ -1121,7 +1121,7 @@ void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size
         }
     }
 
-    if (_myNodeID == uerr.originNodeID)
+    if (_myNodeID == base.originNodeID)
     {
         /* TODO: REMOVE FROM REQUIRED ACK LIST
         If this packet required an ack remove as the route to the node was ok just the user was
@@ -1132,7 +1132,7 @@ void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size
 
     RouteEntry re;
     // is there a route to the original sender
-    if (!getRoute(uerr.originNodeID, re))
+    if (!getRoute(base.originNodeID, re))
     {
         Serial.println("[AODVRouter] Failed to deliver RERR to original sender ");
         return;
@@ -1269,6 +1269,7 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
     BaseHeader bh;
     bh.destNodeID = nextHop; // or unicast to original sender
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = originNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UERR;
     bh.flags = 0;
@@ -1278,7 +1279,6 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
     UERRHeader uerr;
     uerr.nodeID = nodeID;
     uerr.originalPacketID = originalPacketID;
-    uerr.originNodeID = originNodeID;
     uerr.userID = userID;
 
     transmitPacket(bh, (uint8_t *)&uerr, sizeof(UERRHeader));

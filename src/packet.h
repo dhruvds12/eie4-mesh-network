@@ -139,7 +139,7 @@ struct UERRHeader
 {
     uint32_t userID;
     uint32_t nodeID;
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t originalPacketID;
 };
 
@@ -397,8 +397,8 @@ inline size_t serialiseUERRHeader(const UERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.nodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
     return offset;
@@ -410,8 +410,8 @@ inline size_t deserialiseUERRHeader(const uint8_t *buffer, UERRHeader &header, s
     offset += 4;
     memcpy(&header.nodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.originalPacketID, buffer + offset, 4);
     offset += 4;
     return offset;
