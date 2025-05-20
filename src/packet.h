@@ -39,15 +39,31 @@ enum flags : uint8_t
 static constexpr uint8_t FLAG_ENCRYPTED = 0x80;
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
-// Base Header (16 bytes)
+// Base header (16 bytes)
+/**
+ * @brief The base header (16 bytes).
+ *
+ * destNodeID      (4 bytes) - The destination of the message (node ID or BROADCAST_ADDR).
+ * prevHopID       (4 bytes) - The previous hop of the packet.
+ * originNodeID    (4 bytes) -
+ *   • RREQ & UREQ:   original sender of the route request
+ *   • RREP & UREP:   sender of the route reply
+ *   • RERR & UERR:   sender of the error packet
+ *   • DATA, BROADCASTINFO, USER_MSG, ACK: original sender of the packet
+ * packetID        (4 bytes) - A random packet ID chosen by the sender; constant throughout its journey.
+ * packetType      (1 byte)  - Packet type identifier (see PacketType enum).
+ * flags           (1 byte)  - Bitmask for optional flags (see flags enum).
+ * hopCount        (1 byte)  - Number of hops (incremented +1 per hop).
+ * reserved        (1 byte)  - Reserved for future expansion.
+ */
 struct BaseHeader
 {
     uint32_t destNodeID;   // 4 bytes
     uint32_t prevHopID;    // 4 bytes
     uint32_t originNodeID; // 4 bytes
     uint32_t packetID;     // 4 bytes
-    uint8_t packetType;    // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
-    uint8_t flags;         // 1 byte: bitmask for options (e.g., WantAck)
+    uint8_t packetType;    // 1 byte: see PacketType
+    uint8_t flags;         // 1 byte: see flags enum
     uint8_t hopCount;      // 1 byte: TTL/hop count
     uint8_t reserved;      // 1 byte: reserved
 };
