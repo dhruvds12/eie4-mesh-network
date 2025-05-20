@@ -43,9 +43,9 @@ static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 /**
  * @brief The base header (20 bytes).
  *
- * destNodeID      (4 bytes) - The destination of the message (node ID or BROADCAST_ADDR).
+ * destNodeID      (4 bytes) - Next hop of the message or BroadcastAddr for broadcast msgs. See aodvRouter implementation for more details.
  * prevHopID       (4 bytes) - The previous hop of the packet.
- * originNodeID    (4 bytes) -
+ * originNodeID    (4 bytes) - constant byt means different things per packet type
  *   • RREQ & UREQ:   original sender of the route request
  *   • RREP & UREP:   sender of the route reply
  *   • RERR & UERR:   sender of the error packet

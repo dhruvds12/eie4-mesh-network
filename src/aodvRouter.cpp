@@ -561,6 +561,39 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     BaseHeader bh;
     deserialiseBaseHeader(rxPacket->data, bh);
 
+    if (bh.flags & FLAG_ENCRYPTED)
+    {
+        Serial.println("Decrypting packet");
+        if (rxPacket->len < sizeof(BaseHeader) + TAG_LEN)
+            return; /* malformed */
+
+        size_t cipherLen = rxPacket->len - sizeof(BaseHeader) - TAG_LEN;
+        uint8_t *cipher = rxPacket->data + sizeof(BaseHeader);
+        uint8_t *tag = cipher + cipherLen;
+
+        uint8_t nonce[NONCE_LEN];
+        buildNonce(bh, nonce);
+
+        /* allocate a small stack buffer – cipherLen ≤ 227 */
+        uint8_t plain[255];
+        if (!aes_gcm_decrypt(nonce, NONCE_LEN,
+                             rxPacket->data, sizeof(BaseHeader), /* AAD */
+                             cipher, cipherLen,
+                             tag, TAG_LEN,
+                             plain))
+        {
+            Serial.println("[AODV] Auth failed – drop");
+            return;
+        }
+
+        /* overwrite cipher with plaintext in-place */
+        memcpy(cipher, plain, cipherLen);
+        rxPacket->len = sizeof(BaseHeader) + cipherLen;
+
+        bh.flags &= ~FLAG_ENCRYPTED;                       // clear for high-level logic
+        rxPacket->data[sizeof(BaseHeader) - 3] = bh.flags; // header byte  (offset 17)
+    }
+
     if (tryImplicitAck(bh.packetID))
         return;
 
@@ -1365,69 +1398,138 @@ void AODVRouter::flushUserRouteBuffer(uint32_t nodeID)
 }
 
 // TRANSMIT PACKET
-void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHeader, size_t extLen,
+// void AODVRouter::transmitPacket(const BaseHeader &header, const uint8_t *extHeader, size_t extLen,
+//                                 const uint8_t *payload, size_t payloadLen)
+// {
+//     uint8_t buffer[255];
+//     size_t offset = 0;
+//     offset += serialiseBaseHeader(header, buffer + offset);
+
+//     // Append the extension header, if provided.
+//     if (extHeader && extLen > 0)
+//     {
+//         if (offset + extLen > sizeof(buffer))
+//         {
+//             Serial.println("[AODVRouter] transmitPacket buffer overflow with extension header!");
+//             return;
+//         }
+//         memcpy(buffer + offset, extHeader, extLen);
+//         offset += extLen;
+//     }
+
+//     // Append the payload, if provided.
+//     if (payload && payloadLen > 0)
+//     {
+//         if (offset + payloadLen > sizeof(buffer))
+//         {
+//             Serial.println("[AODVRouter] transmitPacket buffer overflow with payload!");
+//             return;
+//         }
+//         memcpy(buffer + offset, payload, payloadLen);
+//         offset += payloadLen;
+//     }
+//     Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
+//     if (_mqttManager != nullptr && _mqttManager->connected)
+//     {
+//         uint8_t localCopy[255];
+//         memcpy(localCopy, buffer, offset);
+//         _mqttManager->publishPacket(header.packetID, localCopy, offset);
+//     }
+//     // Now send the complete packet to the radio manager.
+//     bool queued = _radioManager->enqueueTxPacket(buffer, offset);
+//     if (!queued)
+//     {
+//         Serial.println("[AODVRouter] transmitPacket could not enqueue!");
+//     }
+//     else
+//     {
+//         // For unicast packets that require an implicit ACK, store a copy in the ackBuffer.
+//         if (header.destNodeID != BROADCAST_ADDR && (header.flags == REQ_ACK))
+//         {
+//             RouteEntry re;
+//             // Get the expected next hop from the routing table.
+//             if (getRoute(header.destNodeID, re))
+//             {
+//                 // Store a copy of the packet along with its metadata.
+//                 // TODO: Also store packet type
+//                 // New way of doing ack is check for ack header then add to the map if we fail to transmit 3 times go back to sender with rerr.
+//                 // This should avoid unnecessary traffic
+//                 // Instead of storing in transmitt this function could be moved just before transmit packet is called in other functions
+//                 // this provides the ack with more info such as type without having to add functionality to transmit packet.
+//                 storeAckPacket(header.packetID, buffer, offset, re.nextHop);
+//             }
+//             // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken
+//             // node BUT too late to stop transmission -> potentially should warn user about a possible failure (NOT REQUIRED FEATURE)
+//         }
+//     }
+// }
+
+void AODVRouter::transmitPacket(const BaseHeader &header,
+                                const uint8_t *extHeader, size_t extLen,
                                 const uint8_t *payload, size_t payloadLen)
 {
+    /* ---- 1. build *mutable* header with ENC flag -------------------- */
+    BaseHeader hdrOut = header;
+    hdrOut.flags |= FLAG_ENCRYPTED;
+
     uint8_t buffer[255];
     size_t offset = 0;
-    offset += serialiseBaseHeader(header, buffer + offset);
+    offset += serialiseBaseHeader(hdrOut, buffer + offset);
 
-    // Append the extension header, if provided.
-    if (extHeader && extLen > 0)
+    /* ---- 2. marshal plaintext (= extHeader || payload) -------------- */
+    uint8_t plain[255];
+    size_t plainLen = 0;
+
+    if (extHeader && extLen)
     {
-        if (offset + extLen > sizeof(buffer))
-        {
-            Serial.println("[AODVRouter] transmitPacket buffer overflow with extension header!");
-            return;
-        }
-        memcpy(buffer + offset, extHeader, extLen);
-        offset += extLen;
+        memcpy(plain + plainLen, extHeader, extLen);
+        plainLen += extLen;
+    }
+    if (payload && payloadLen)
+    {
+        memcpy(plain + plainLen, payload, payloadLen);
+        plainLen += payloadLen;
     }
 
-    // Append the payload, if provided.
-    if (payload && payloadLen > 0)
+    if (offset + plainLen + TAG_LEN > sizeof(buffer))
     {
-        if (offset + payloadLen > sizeof(buffer))
-        {
-            Serial.println("[AODVRouter] transmitPacket buffer overflow with payload!");
-            return;
-        }
-        memcpy(buffer + offset, payload, payloadLen);
-        offset += payloadLen;
+        Serial.println("[AODV] oversize pkt");
+        return;
     }
-    Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
-    if (_mqttManager != nullptr && _mqttManager->connected)
+
+    /* ---- 3. encrypt -------------------------------------------------- */
+    uint8_t nonce[NONCE_LEN];
+    buildNonce(hdrOut, nonce);
+
+    uint8_t *cipher = buffer + offset;
+    uint8_t *tag = cipher + plainLen;
+
+    if (!aes_gcm_encrypt(nonce, NONCE_LEN,
+                         buffer, sizeof(BaseHeader),
+                         plain, plainLen,
+                         cipher, tag, TAG_LEN))
     {
-        uint8_t localCopy[255];
-        memcpy(localCopy, buffer, offset);
-        _mqttManager->publishPacket(header.packetID, localCopy, offset);
+        Serial.println("[AODV] encrypt fail");
+        return;
     }
-    // Now send the complete packet to the radio manager.
-    bool queued = _radioManager->enqueueTxPacket(buffer, offset);
-    if (!queued)
+
+    offset += plainLen + TAG_LEN; /* final packet length */
+
+    /* ---- 4. hand to radio + bookkeeping (unchanged) ------------------ */
+    if (_mqttManager && _mqttManager->connected)
+        _mqttManager->publishPacket(hdrOut.packetID, buffer, offset);
+
+    if (!_radioManager->enqueueTxPacket(buffer, offset))
     {
-        Serial.println("[AODVRouter] transmitPacket could not enqueue!");
+        Serial.println("[AODV] enqueueTxPacket failed");
+        return;
     }
-    else
+
+    if (hdrOut.destNodeID != BROADCAST_ADDR && (hdrOut.flags & REQ_ACK))
     {
-        // For unicast packets that require an implicit ACK, store a copy in the ackBuffer.
-        if (header.destNodeID != BROADCAST_ADDR && (header.flags == REQ_ACK))
-        {
-            RouteEntry re;
-            // Get the expected next hop from the routing table.
-            if (getRoute(header.destNodeID, re))
-            {
-                // Store a copy of the packet along with its metadata.
-                // TODO: Also store packet type
-                // New way of doing ack is check for ack header then add to the map if we fail to transmit 3 times go back to sender with rerr.
-                // This should avoid unnecessary traffic
-                // Instead of storing in transmitt this function could be moved just before transmit packet is called in other functions
-                // this provides the ack with more info such as type without having to add functionality to transmit packet.
-                storeAckPacket(header.packetID, buffer, offset, re.nextHop);
-            }
-            // if the get route fails don't store packet details, if for some reason at this stage the route is not found likely transmission will fail due to a broken
-            // node BUT too late to stop transmission -> potentially should warn user about a possible failure (NOT REQUIRED FEATURE)
-        }
+        RouteEntry re;
+        if (getRoute(hdrOut.destNodeID, re))
+            storeAckPacket(hdrOut.packetID, buffer, offset, re.nextHop);
     }
 }
 

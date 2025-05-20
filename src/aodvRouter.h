@@ -13,6 +13,22 @@
 #include <unordered_map>
 #include "userSessionManager.h"
 #include "IClientNotifier.h"
+#include "crypto/crypto.h"
+
+static constexpr size_t NONCE_LEN = 12;
+static constexpr size_t TAG_LEN = 8;
+
+/* 12-byte nonce layout:
+   [0..3] originNodeID  | [4..7] packetID | [8] hopCount | [9] pktType | [10..11] 0 */
+static inline void buildNonce(const BaseHeader &bh, uint8_t nonce[NONCE_LEN])
+{
+    memcpy(nonce, &bh.originNodeID, 4);
+    memcpy(nonce + 4, &bh.packetID, 4);
+    nonce[8] = bh.hopCount;
+    nonce[9] = bh.packetType;
+    nonce[10] = 0;
+    nonce[11] = 0;
+}
 
 class GatewayManager;
 
