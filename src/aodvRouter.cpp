@@ -1061,7 +1061,7 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
     fwd.prevHopID = _myNodeID;
     fwd.hopCount++;
 
-    transmitPacket(fwd, (uint8_t *)&ureq, sizeof(UREPHeader));
+    transmitPacket(fwd, (uint8_t *)&ureq, sizeof(UREQHeader));
 }
 
 void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size_t payloadlen)

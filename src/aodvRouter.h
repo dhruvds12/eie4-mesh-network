@@ -320,7 +320,7 @@ private:
      * @param originalDest
      * @param originalPacketID
      */
-    void sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID);
+    void sendRERR(uint32_t brokenNodeID, uint32_t originNodeID, uint32_t originalDest, uint32_t originalPacketID);
 
     void sendUREQ(uint32_t userID);
 

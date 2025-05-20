@@ -39,9 +39,9 @@ enum flags : uint8_t
 static constexpr uint8_t FLAG_ENCRYPTED = 0x80;
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
-// Base header (16 bytes)
+// Base header (20 bytes)
 /**
- * @brief The base header (16 bytes).
+ * @brief The base header (20 bytes).
  *
  * destNodeID      (4 bytes) - The destination of the message (node ID or BROADCAST_ADDR).
  * prevHopID       (4 bytes) - The previous hop of the packet.
