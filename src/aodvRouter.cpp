@@ -877,7 +877,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     }
 
     DiffBroadcastInfoHeader dh;
-    memcpy(&dh, payload, sizeof(BROADCASTINFOHeader));
+    memcpy(&dh, payload, sizeof(DiffBroadcastInfoHeader));
 
     if (!isNodeIDKnown(base.prevHopID))
     {
@@ -1289,6 +1289,7 @@ void AODVRouter::sendACK(uint32_t destNodeID, uint32_t originalPacketID)
     BaseHeader bh{};
     bh.destNodeID = destNodeID;
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_ACK;
     bh.flags = 0;

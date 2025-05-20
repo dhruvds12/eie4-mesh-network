@@ -110,10 +110,6 @@ struct DATAHeader
     // uint32_t originNodeID; // 4 bytes: original sender
 };
 
-struct BROADCASTINFOHeader
-{
-    uint32_t originNodeID;
-};
 
 #pragma pack(push, 1)
 struct DiffBroadcastInfoHeader
