@@ -714,14 +714,14 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     }
 
     // If I initially sent the RREQ no need to continue forwarding
-    if (_myNodeID == rrep.originNodeID)
+    if (_myNodeID == base.originNodeID)
     {
         Serial.println("[AODVRouter] Got RREP for rreq");
         return;
     }
 
     RouteEntry re;
-    if (!getRoute(rrep.originNodeID, re))
+    if (!getRoute(base.originNodeID, re))
     {
         Serial.println("[AODVRouter] Got RREP but no route to the origin!");
         return;
@@ -1189,6 +1189,7 @@ void AODVRouter::sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t n
     BaseHeader bh;
     bh.destNodeID = nextHop;
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = originNodeID; // node that originally needed the route
     bh.packetID = esp_random();
     bh.packetType = PKT_RREP;
     bh.flags = 0;
@@ -1196,7 +1197,6 @@ void AODVRouter::sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t n
     bh.reserved = 0;
 
     RREPHeader rrep;
-    rrep.originNodeID = originNodeID; // node that originally needed the route
     rrep.RREPDestNodeID = destNodeID; // destination of the route
     rrep.lifetime = 0;
     rrep.numHops = hopCount;

@@ -80,7 +80,7 @@ struct RREQHeader
 #pragma pack(push, 1)
 struct RREPHeader
 {
-    uint32_t originNodeID;   // 4 bytes: original rreq requester
+    // uint32_t originNodeID;   // 4 bytes: original rreq requester
     uint32_t RREPDestNodeID; // 4 bytes: destination of route
     uint16_t lifetime;       // 2 bytes: route lifetime
     uint8_t numHops;         // 1 byte:  Number of hops using this route
@@ -226,8 +226,7 @@ inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, s
 // ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+
     memcpy(buffer + offset, &header.RREPDestNodeID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.lifetime, 2);
@@ -238,8 +237,6 @@ inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseRREPHeader(const uint8_t *buffer, RREPHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
     memcpy(&header.RREPDestNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.lifetime, buffer + offset, 2);
