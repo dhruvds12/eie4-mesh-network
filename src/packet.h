@@ -148,7 +148,7 @@ struct UserMsgHeader
     uint32_t fromUserID;
     uint32_t toUserID;
     uint32_t toNodeID;
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -428,8 +428,8 @@ inline size_t serialiseUserMsgHeader(const UserMsgHeader &header, uint8_t *buffe
     offset += 4;
     memcpy(buffer + offset, &header.toNodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
 
     return offset;
 }
@@ -442,8 +442,8 @@ inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &hea
     offset += 4;
     memcpy(&header.toNodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     return offset;
 }
 

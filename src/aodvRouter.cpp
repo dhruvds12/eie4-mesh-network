@@ -347,7 +347,7 @@ void AODVRouter::cleanupAckBuffer()
         {
             UserMsgHeader uh;
             deserialiseUserMsgHeader(ent.packet, uh, sizeof(BaseHeader));
-            sendRERR(_myNodeID, uh.originNodeID, uh.toNodeID, pid);
+            sendRERR(_myNodeID, bh.originNodeID, uh.toNodeID, pid);
             break;
         }
 
@@ -528,6 +528,7 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
     BaseHeader bh;
     bh.destNodeID = nextHopID;
     bh.prevHopID = _myNodeID;
+    bh.originNodeID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_USER_MSG;
     bh.flags = flags; // No flags set ie no ACK etc expected
@@ -538,7 +539,6 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
     umh.fromUserID = fromUserID;
     umh.toUserID = toUserID;
     umh.toNodeID = destNodeID;
-    umh.originNodeID = _myNodeID;
 
     Serial.printf(
         "Creating user to user message: from user %u to user %u (node %u)\n",
@@ -1010,7 +1010,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     {
         Serial.printf("[AODVRouter] No route to forward data to %u, dropping.\n", umh.toNodeID);
         // special case where node self reports broken link therefore brokenNodeID == originNodeID
-        sendRERR(_myNodeID, umh.originNodeID, umh.toNodeID, base.packetID);
+        sendRERR(_myNodeID, base.originNodeID, umh.toNodeID, base.packetID);
         // could just fold the message in data buffer and send a RREQ -> this is probably the best solution
         return;
     }
