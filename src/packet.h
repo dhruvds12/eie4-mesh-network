@@ -36,18 +36,20 @@ enum flags : uint8_t
     REQ_ACK = 0x04
 };
 
+static constexpr uint8_t FLAG_ENCRYPTED = 0x80;
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
 // Base Header (16 bytes)
 struct BaseHeader
 {
     uint32_t destNodeID; // 4 bytes
-    uint32_t srcNodeID;  // 4 bytes
-    uint32_t packetID;   // 4 bytes
-    uint8_t packetType;  // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
-    uint8_t flags;       // 1 byte: bitmask for options (e.g., WantAck)
-    uint8_t hopCount;    // 1 byte: TTL/hop count
-    uint8_t reserved;    // 1 byte: reserved
+    uint32_t prevHopID;  // 4 bytes
+    // uint32_t originNodeID; // 4 bytes
+    uint32_t packetID;  // 4 bytes
+    uint8_t packetType; // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
+    uint8_t flags;      // 1 byte: bitmask for options (e.g., WantAck)
+    uint8_t hopCount;   // 1 byte: TTL/hop count
+    uint8_t reserved;   // 1 byte: reserved
 };
 
 // Extended header for RREQ (8 bytes)
@@ -149,7 +151,7 @@ inline size_t serialiseBaseHeader(const BaseHeader &header, uint8_t *buffer)
     size_t offset = 0;
     memcpy(buffer + offset, &header.destNodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.srcNodeID, 4);
+    memcpy(buffer + offset, &header.prevHopID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.packetID, 4);
     offset += 4;
@@ -165,7 +167,7 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
     size_t offset = 0;
     memcpy(&header.destNodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.srcNodeID, buffer + offset, 4);
+    memcpy(&header.prevHopID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.packetID, buffer + offset, 4);
     offset += 4;

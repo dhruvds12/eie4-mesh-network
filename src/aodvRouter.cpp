@@ -147,7 +147,7 @@ void AODVRouter::sendBroadcastInfo()
 {
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR; // Broadcast to all nodes
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_BROADCAST_INFO; // Use broadcast packet type
     bh.flags = 0;
@@ -275,7 +275,7 @@ void AODVRouter::sendBroadcastInfo()
 //             // For RREP packets, extract the relevant header information.
 //             RREPHeader rrep;
 //             memcpy(&rrep, abe.packet + offset, sizeof(RREPHeader));
-//             sendRERR(abe.expectedNextHop, baseHdr.srcNodeID, rrep.RREPDestNodeID, baseHdr.packetID);
+//             sendRERR(abe.expectedNextHop, baseHdr.prevHopID, rrep.RREPDestNodeID, baseHdr.packetID);
 //         }
 //         vPortFree(abe.packet);
 //     }
@@ -416,7 +416,7 @@ void AODVRouter::sendData(uint32_t destNodeID, const uint8_t *data, size_t len, 
         bh.destNodeID = BROADCAST_ADDR;
     }
 
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_DATA;
     bh.flags = flags; // No flags set ie no ACK etc expected
@@ -527,7 +527,7 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
 
     BaseHeader bh;
     bh.destNodeID = nextHopID;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = (uint32_t)(esp_random()); // TODO: Might need to improve random number generation
     bh.packetType = PKT_USER_MSG;
     bh.flags = flags; // No flags set ie no ACK etc expected
@@ -572,9 +572,9 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
 
     storePacketID(bh.packetID);
 
-    if (bh.srcNodeID == _myNodeID)
+    if (bh.prevHopID == _myNodeID)
     {
-        Serial.println("[AODVRouter] Reveived packet with srcNodeID == myNodeID. Not expected behaviour! Unless I sent a broadcast");
+        Serial.println("[AODVRouter] Reveived packet with prevHopID == myNodeID. Not expected behaviour! Unless I sent a broadcast");
         return;
     }
 
@@ -644,10 +644,10 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     memcpy(&rreq, payload, sizeof(RREQHeader));
 
     // add route to origin node through the node sending if the hopcount is less than any previous route
-    updateRoute(rreq.originNodeID, base.srcNodeID, base.hopCount + 1);
+    updateRoute(rreq.originNodeID, base.prevHopID, base.hopCount + 1);
 
     // technically shoudl also add the neighbour who sent it as you may not have them saved either
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
 
     if (rreq.RREQDestNodeID == _myNodeID)
     {
@@ -656,7 +656,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
         // Changed hop count to not use the prev hop count as it may take a different route to get back to the
         // the origin node so we reset to 0. To improve this we would need to store the route taken by this packet.
         // Therefore, numHops needds to incremented everytime it is forwarded.
-        sendRREP(rreq.originNodeID, _myNodeID, base.srcNodeID, 0);
+        sendRREP(rreq.originNodeID, _myNodeID, base.prevHopID, 0);
         return;
     }
 
@@ -667,7 +667,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
         {
             Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
             // There is a route to the node, therefore use the entry as the base number of hops
-            sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.srcNodeID, re.hopcount);
+            sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.prevHopID, re.hopcount);
             return;
         }
     }
@@ -679,7 +679,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     BaseHeader fwdBase = base;
 
     // Next hop is broadcast
-    fwdBase.srcNodeID = _myNodeID; // now I'm the new "immediate sender"
+    fwdBase.prevHopID = _myNodeID; // now I'm the new "immediate sender"
     fwdBase.hopCount++;            // or do your TTL logic
     // We do a broadcast
     fwdBase.destNodeID = BROADCAST_ADDR;
@@ -702,10 +702,10 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
     memcpy(&rrep, payload, sizeof(RREPHeader));
 
     // update route to the rrep.RREPDESTNODEID if not already found
-    updateRoute(rrep.RREPDestNodeID, base.srcNodeID, rrep.numHops + 1);
+    updateRoute(rrep.RREPDestNodeID, base.prevHopID, rrep.numHops + 1);
 
     // technically should also add the neighbour who sent it as you may not have them saved either
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
 
     if (hasRoute(rrep.RREPDestNodeID))
     {
@@ -741,7 +741,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
 
     BaseHeader fwdBase = base;
     fwdBase.destNodeID = re.nextHop;
-    fwdBase.srcNodeID = _myNodeID;
+    fwdBase.prevHopID = _myNodeID;
     fwdBase.packetType = PKT_RREP;
     fwdBase.hopCount++;
 
@@ -763,7 +763,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
 
     if (rerr.brokenNodeID != rerr.reporterNodeID)
     {
-        invalidateRoute(rerr.brokenNodeID, rerr.originalDestNodeID, base.srcNodeID);
+        invalidateRoute(rerr.brokenNodeID, rerr.originalDestNodeID, base.prevHopID);
     }
     else
     {
@@ -793,7 +793,7 @@ void AODVRouter::handleRERR(const BaseHeader &base, const uint8_t *payload, size
 
     BaseHeader fwdBase = base;
     fwdBase.destNodeID = re.nextHop;
-    fwdBase.srcNodeID = _myNodeID;
+    fwdBase.prevHopID = _myNodeID;
     fwdBase.packetType = PKT_RERR;
     fwdBase.hopCount++;
 
@@ -817,7 +817,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
     if (base.flags == REQ_ACK)
     {
         // Per-hop explicit ACK to the previous hop
-        sendACK(base.srcNodeID, base.packetID);
+        sendACK(base.prevHopID, base.packetID);
     }
 
     if (_myNodeID == dataHeader.finalDestID)
@@ -831,7 +831,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
     }
 
     BaseHeader fwd = base;
-    fwd.srcNodeID = _myNodeID;
+    fwd.prevHopID = _myNodeID;
     if (dataHeader.finalDestID == BROADCAST_ADDR)
     {
         // TODO: need to stop the broadcast at some point
@@ -879,9 +879,9 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     DiffBroadcastInfoHeader dh;
     memcpy(&dh, payload, sizeof(BROADCASTINFOHeader));
 
-    if (!isNodeIDKnown(base.srcNodeID))
+    if (!isNodeIDKnown(base.prevHopID))
     {
-        saveNodeID(base.srcNodeID);
+        saveNodeID(base.prevHopID);
     }
 
     if (!isNodeIDKnown(dh.originNodeID))
@@ -911,13 +911,13 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     Serial.printf("[AODVRouter] Info: %.*s\n", (int)payloadLen, (const char *)payload);
 
     // update the routing table
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
 
     // update route to the originNode
     if (dh.originNodeID != _myNodeID)
     {
 
-        updateRoute(dh.originNodeID, base.srcNodeID, base.hopCount + 1);
+        updateRoute(dh.originNodeID, base.prevHopID, base.hopCount + 1);
     }
 
     size_t offset = sizeof(DiffBroadcastInfoHeader);
@@ -950,7 +950,7 @@ void AODVRouter::handleBroadcastInfo(const BaseHeader &base, const uint8_t *payl
     Serial.println("[AODVRouter] Forwading BroadcastINFO");
     // increment number of hops
     BaseHeader fwd = base;
-    fwd.srcNodeID = _myNodeID; // replace your node id and store the originNodeID in the bih header
+    fwd.prevHopID = _myNodeID; // replace your node id and store the originNodeID in the bih header
     fwd.hopCount++;
 
     // check number of hops
@@ -975,7 +975,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     if (base.flags == REQ_ACK)
     {
         // Per-hop explicit ACK to the previous hop
-        sendACK(base.srcNodeID, base.packetID);
+        sendACK(base.prevHopID, base.packetID);
     }
 
     if ((_myNodeID == umh.toNodeID) && (base.flags == TO_GATEWAY))
@@ -1017,7 +1017,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     Serial.println("[AODVRouter] Forwading Data");
 
     BaseHeader fwd = base;
-    fwd.srcNodeID = _myNodeID;
+    fwd.prevHopID = _myNodeID;
     fwd.destNodeID = re.nextHop;
     fwd.hopCount++;
     fwd.packetType = PKT_USER_MSG;
@@ -1030,13 +1030,13 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
     UREQHeader ureq;
     deserialiseUREQHeader(payload, ureq, 0);
 
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
-    updateRoute(ureq.originNodeID, base.srcNodeID, base.hopCount + 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
+    updateRoute(ureq.originNodeID, base.prevHopID, base.hopCount + 1);
 
     // Local user
     if (_usm->knowsUser(ureq.userID))
     {
-        sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1);
+        sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1);
         return;
     }
 
@@ -1050,7 +1050,7 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
         {
             if (re.hopcount >= userReplyThreshold)
             {
-                sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.srcNodeID, 0, base.hopCount + 1 + re.hopcount);
+                sendUREP(ureq.originNodeID, _myNodeID, ureq.userID, base.prevHopID, 0, base.hopCount + 1 + re.hopcount);
                 return;
             }
         }
@@ -1058,7 +1058,7 @@ void AODVRouter::handleUREQ(const BaseHeader &base, const uint8_t *payload, size
 
     // Forward UREQ
     BaseHeader fwd = base;
-    fwd.srcNodeID = _myNodeID;
+    fwd.prevHopID = _myNodeID;
     fwd.hopCount++;
 
     transmitPacket(fwd, (uint8_t *)&ureq, sizeof(UREPHeader));
@@ -1069,8 +1069,8 @@ void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size
     UREPHeader urep;
     deserialiseUREPHeader(payload, urep, 0);
 
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
-    updateRoute(urep.destNodeID, base.srcNodeID, base.hopCount + 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
+    updateRoute(urep.destNodeID, base.prevHopID, base.hopCount + 1);
     GutEntry ge;
     ge.nodeID = urep.destNodeID;
     ge.seq = 0; // TODO: will need to be changed to actually handle seq number
@@ -1097,7 +1097,7 @@ void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size
     Serial.println("[AODVRouter] Forwading UREP");
     BaseHeader fwd = base;
     fwd.destNodeID = re.nextHop;
-    fwd.srcNodeID = _myNodeID;
+    fwd.prevHopID = _myNodeID;
     fwd.hopCount++;
 
     transmitPacket(fwd, (uint8_t *)&urep, sizeof(UREPHeader));
@@ -1108,7 +1108,7 @@ void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size
     UERRHeader uerr;
     deserialiseUERRHeader(payload, uerr, 0);
 
-    updateRoute(base.srcNodeID, base.srcNodeID, 1);
+    updateRoute(base.prevHopID, base.prevHopID, 1);
 
     // everyone should note the change in user location, need to check that the gut entry is for that node
     GutEntry ge;
@@ -1143,7 +1143,7 @@ void AODVRouter::handleUERR(const BaseHeader &base, const uint8_t *payload, size
 
     BaseHeader fwdBase = base;
     fwdBase.destNodeID = re.nextHop;
-    fwdBase.srcNodeID = _myNodeID;
+    fwdBase.prevHopID = _myNodeID;
     fwdBase.hopCount++;
 
     transmitPacket(fwdBase, (uint8_t *)&uerr, sizeof(UERRHeader));
@@ -1170,7 +1170,7 @@ void AODVRouter::sendRREQ(uint32_t destNodeID)
 {
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RREQ;
     bh.flags = 0;
@@ -1188,7 +1188,7 @@ void AODVRouter::sendRREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t n
 {
     BaseHeader bh;
     bh.destNodeID = nextHop;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RREP;
     bh.flags = 0;
@@ -1208,7 +1208,7 @@ void AODVRouter::sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t
 {
     BaseHeader bh;
     bh.destNodeID = senderNodeID; // or unicast to original sender
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_RERR;
     bh.flags = 0;
@@ -1229,7 +1229,7 @@ void AODVRouter::sendUREQ(uint32_t userID)
 {
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UREQ;
     bh.flags = 0;
@@ -1247,7 +1247,7 @@ void AODVRouter::sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t u
 {
     BaseHeader bh;
     bh.destNodeID = nextHop;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UREP;
     bh.flags = 0;
@@ -1268,7 +1268,7 @@ void AODVRouter::sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeI
 {
     BaseHeader bh;
     bh.destNodeID = nextHop; // or unicast to original sender
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_UERR;
     bh.flags = 0;
@@ -1288,7 +1288,7 @@ void AODVRouter::sendACK(uint32_t destNodeID, uint32_t originalPacketID)
 {
     BaseHeader bh{};
     bh.destNodeID = destNodeID;
-    bh.srcNodeID = _myNodeID;
+    bh.prevHopID = _myNodeID;
     bh.packetID = esp_random();
     bh.packetType = PKT_ACK;
     bh.flags = 0;
@@ -1323,7 +1323,7 @@ void AODVRouter::flushDataQueue(uint32_t destNodeID)
         {
             BaseHeader bh;
             bh.destNodeID = re.nextHop;
-            bh.srcNodeID = _myNodeID;
+            bh.prevHopID = _myNodeID;
             bh.packetID = esp_random();
             bh.packetType = PKT_DATA;
             bh.flags = 0;
@@ -1610,7 +1610,7 @@ void AODVRouter::removeFromACKBuffer(uint32_t packetID)
     if (it != ackBuffer.end())
     {
         // TODO:  verify that the packet came from the expected next hop:
-        // if (bh.srcNodeID == it->second.expectedNextHop)
+        // if (bh.prevHopID == it->second.expectedNextHop)
         // {
         //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
         //     ackBuffer.erase(it);
