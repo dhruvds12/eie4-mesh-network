@@ -644,7 +644,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     memcpy(&rreq, payload, sizeof(RREQHeader));
 
     // add route to origin node through the node sending if the hopcount is less than any previous route
-    updateRoute(rreq.originNodeID, base.prevHopID, base.hopCount + 1);
+    updateRoute(base.originNodeID, base.prevHopID, base.hopCount + 1);
 
     // technically shoudl also add the neighbour who sent it as you may not have them saved either
     updateRoute(base.prevHopID, base.prevHopID, 1);
@@ -656,7 +656,7 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
         // Changed hop count to not use the prev hop count as it may take a different route to get back to the
         // the origin node so we reset to 0. To improve this we would need to store the route taken by this packet.
         // Therefore, numHops needds to incremented everytime it is forwarded.
-        sendRREP(rreq.originNodeID, _myNodeID, base.prevHopID, 0);
+        sendRREP(base.originNodeID, _myNodeID, base.prevHopID, 0);
         return;
     }
 
@@ -665,9 +665,9 @@ void AODVRouter::handleRREQ(const BaseHeader &base, const uint8_t *payload, size
     {
         if (re.hopcount >= routeReplyThreshold)
         {
-            Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, rreq.originNodeID);
+            Serial.printf("[AODVRouter] I have a route to %u, so I'll send RREP back to %u.\n", rreq.RREQDestNodeID, base.originNodeID);
             // There is a route to the node, therefore use the entry as the base number of hops
-            sendRREP(rreq.originNodeID, rreq.RREQDestNodeID, base.prevHopID, re.hopcount);
+            sendRREP(base.originNodeID, rreq.RREQDestNodeID, base.prevHopID, re.hopcount);
             return;
         }
     }
@@ -1170,7 +1170,8 @@ void AODVRouter::sendRREQ(uint32_t destNodeID)
 {
     BaseHeader bh;
     bh.destNodeID = BROADCAST_ADDR;
-    bh.prevHopID = _myNodeID;
+    bh.prevHopID = _myNodeID;       // I am the prevHop for now this will be overwritten
+    bh.originNodeID = _myNodeID;    // Person who request the route request
     bh.packetID = esp_random();
     bh.packetType = PKT_RREQ;
     bh.flags = 0;
@@ -1178,7 +1179,6 @@ void AODVRouter::sendRREQ(uint32_t destNodeID)
     bh.reserved = 0;
 
     RREQHeader rreq;
-    rreq.originNodeID = _myNodeID;    // Person who request the route request
     rreq.RREQDestNodeID = destNodeID; // ID of node route required for
 
     transmitPacket(bh, (uint8_t *)&rreq, sizeof(RREQHeader));

@@ -55,7 +55,6 @@ struct BaseHeader
 // Extended header for RREQ (8 bytes)
 struct RREQHeader
 {
-    uint32_t originNodeID;   // 4 bytes: origin of the RREQ
     uint32_t RREQDestNodeID; // 4 bytes: Node ID we want to find route to
     // uint8_t currentHops;     // 1 byte:  Current number of hops
     // uint8_t rreqReserved;    // 1 byte:  reserved
@@ -188,8 +187,7 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
 
 inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+
     memcpy(buffer + offset, &header.RREQDestNodeID, 4);
     offset += 4;
     // buffer[offset++] = header.currentHops;
@@ -199,8 +197,7 @@ inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+
     memcpy(&header.RREQDestNodeID, buffer + offset, 4);
     offset += 4;
     // header.currentHops = buffer[offset++];
