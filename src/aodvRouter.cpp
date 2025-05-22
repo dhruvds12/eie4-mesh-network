@@ -664,7 +664,7 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         handlePubKeyReq(bh, payload, payloadLen);
         break;
     case PKT_PUBKEY_RESP:
-    Serial.println("Received Pub Key resp");
+        Serial.println("Received Pub Key resp");
         handlePubKeyResp(bh, payload, payloadLen);
         break;
 
@@ -1224,10 +1224,11 @@ void AODVRouter::handlePubKeyReq(const BaseHeader &base,
     deserialisePubKeyReq(pl, rq, 0);
 
     /*  are we the one who knows this key?  */
-    auto it = _userKeys.find(rq.userID);
-    if (it != _userKeys.end())
+    const std::array<uint8_t, 32>* pubKey = nullptr;
+    bool hasKey = getPubKey(rq.userID, pubKey);
+    if (hasKey)
     { /* yes – send response straight back */
-        sendPubKeyResp(base.prevHopID, rq.userID, base.originNodeID, it->second.data());
+        sendPubKeyResp(base.prevHopID, rq.userID, base.originNodeID, pubKey->data());
         return;
     }
 
@@ -1251,9 +1252,7 @@ void AODVRouter::handlePubKeyResp(const BaseHeader &base,
     deserialisePubKeyResp(pl, rp, 0);
 
     /*  cache it  */
-    _userKeys[rp.userID] =
-        *reinterpret_cast<const std::array<uint8_t, 32> *>(rp.publicKey);
-
+    addPubKey(rp.userID, *reinterpret_cast<const std::array<uint8_t, 32> *>(rp.publicKey));
     if (_myNodeID == base.originNodeID)
     {
         /* push to phone(s) – Outgoing uses from==userID, data==pk           */
@@ -1420,7 +1419,7 @@ void AODVRouter::sendPubKeyReq(uint32_t targetUserID)
     Serial.println("Sending pub key req");
     /*  If we already have the key locally just bail out – the BLE
         side will read from _userKeys.                               */
-    if (_userKeys.count(targetUserID))
+    if (hasPubKey(targetUserID))
         return;
 
     /*  Choose where to send the query:
@@ -1925,9 +1924,27 @@ bool AODVRouter::isGateway(uint32_t n) const
     return _gateways.count(n);
 }
 
-void AODVRouter::addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey) {
-    _userKeys[userID] = publicKey;
+void AODVRouter::addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey)
+{
+    {
+        Lock l(_mutex);
+        _userKeys[userID] = publicKey;
+    }
 }
+
+bool AODVRouter::hasPubKey(uint32_t userID) const {
+    Lock l(_mutex);
+    return (_userKeys.find(userID) != _userKeys.end());
+}
+
+bool AODVRouter::getPubKey(uint32_t userID, const std::array<uint8_t,32>* &outPtr) const {
+        Lock l(_mutex);
+        auto it = _userKeys.find(userID);
+        if (it == _userKeys.end())
+            return false;
+        outPtr = &it->second;
+        return true;
+    }
 
 /*
 
