@@ -24,6 +24,8 @@ enum PacketType : uint8_t
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
+    PKT_PUBKEY_REQ = 0x13,
+    PKT_PUBKEY_RESP = 0x14,
     // TODO new packet type for long range + multihop participation broadcast!!!
 
 };
@@ -33,7 +35,8 @@ enum flags : uint8_t
     FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
     TO_GATEWAY = 0x02,
     I_AM_GATEWAY = 0x03,
-    REQ_ACK = 0x04
+    REQ_ACK = 0x04,
+    ENC_MSG = 0x10
 };
 
 static constexpr uint8_t FLAG_ENCRYPTED = 0x80;
@@ -106,17 +109,16 @@ struct ACKHeader
 // Extended header for DATA (4 bytes)
 struct DATAHeader
 {
-    uint32_t finalDestID;  // 4 bytes: final intended target
+    uint32_t finalDestID; // 4 bytes: final intended target
     // uint32_t originNodeID; // 4 bytes: original sender
 };
-
 
 #pragma pack(push, 1)
 struct DiffBroadcastInfoHeader
 {
     // uint32_t originNodeID; // 4 B
-    uint16_t numAdded;     // 2 B
-    uint16_t numRemoved;   // 2 B
+    uint16_t numAdded;   // 2 B
+    uint16_t numRemoved; // 2 B
 };
 #pragma pack(pop)
 
@@ -149,6 +151,17 @@ struct UserMsgHeader
     uint32_t toUserID;
     uint32_t toNodeID;
     // uint32_t originNodeID;
+};
+
+struct PubKeyReq
+{
+    uint32_t userID; // target userID
+};
+
+struct PubKeyResp
+{
+    uint32_t userID;       // 4 bytes
+    uint8_t publicKey[32]; // 32bytes
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -445,6 +458,37 @@ inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &hea
     // memcpy(&header.originNodeID, buffer + offset, 4);
     // offset += 4;
     return offset;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  PUB-KEY request / response
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialisePubKeyReq(const PubKeyReq &h, uint8_t *buf, size_t off)
+{
+    memcpy(buf + off, &h.userID, 4);
+    return off + 4;
+}
+inline size_t deserialisePubKeyReq(const uint8_t *buf, PubKeyReq &h, size_t off)
+{
+    memcpy(&h.userID, buf + off, 4);
+    return off + 4;
+}
+
+inline size_t serialisePubKeyResp(const PubKeyResp &h, uint8_t *buf, size_t off)
+{
+    memcpy(buf + off, &h.userID, 4);
+    off += 4;
+    memcpy(buf + off, h.publicKey, 32);
+    off += 32;
+    return off;
+}
+inline size_t deserialisePubKeyResp(const uint8_t *buf, PubKeyResp &h, size_t off)
+{
+    memcpy(&h.userID, buf + off, 4);
+    off += 4;
+    memcpy(h.publicKey, buf + off, 32);
+    off += 32;
+    return off;
 }
 
 #endif

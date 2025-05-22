@@ -659,6 +659,15 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
     case PKT_USER_MSG:
         handleUserMessage(bh, payload, payloadLen);
         break;
+    case PKT_PUBKEY_REQ:
+        Serial.println("Received Pub Key req");
+        handlePubKeyReq(bh, payload, payloadLen);
+        break;
+    case PKT_PUBKEY_RESP:
+    Serial.println("Received Pub Key resp");
+        handlePubKeyResp(bh, payload, payloadLen);
+        break;
+
     default:
         Serial.printf("[AODVRouter] Unknown packet type :( %u\n", bh.packetType);
         break;
@@ -1029,6 +1038,15 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
             _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
         }
+        if (base.flags == ENC_MSG)
+        {
+            Serial.println("[AODVRouter] Entered I am receiver path ENCRYPTED User Message");
+            // TODO: need to properly extract the data without the header
+            Serial.printf("[AODVRouter] Received ENCRYPTED USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
+            Serial.printf("[AODVRouter] ENCRYPTED Data: %.*s\n", (int)messageLen, (const char *)message);
+            _clientNotifier->notify(Outgoing{BleType::BLE_ENC_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
+            return;
+        }
         Serial.println("[AODVRouter] Entered I am receiver path User Message");
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
@@ -1197,6 +1215,68 @@ void AODVRouter::handleACK(const BaseHeader &base, const uint8_t *payload, size_
     removeFromACKBuffer(ah.originalPacketID);
 }
 
+void AODVRouter::handlePubKeyReq(const BaseHeader &base,
+                                 const uint8_t *pl, size_t len)
+{
+    if (len < sizeof(PubKeyReq))
+        return;
+    PubKeyReq rq;
+    deserialisePubKeyReq(pl, rq, 0);
+
+    /*  are we the one who knows this key?  */
+    auto it = _userKeys.find(rq.userID);
+    if (it != _userKeys.end())
+    { /* yes – send response straight back */
+        sendPubKeyResp(base.prevHopID, rq.userID, base.originNodeID, it->second.data());
+        return;
+    }
+
+    /*  otherwise forward like a UREQ (same hop-limit logic) */
+    BaseHeader fwd = base;
+    fwd.prevHopID = _myNodeID;
+    fwd.hopCount++;
+
+    if (fwd.hopCount >= MAX_HOPS)
+        return;
+
+    transmitPacket(fwd, pl, len);
+}
+
+void AODVRouter::handlePubKeyResp(const BaseHeader &base,
+                                  const uint8_t *pl, size_t len)
+{
+    if (len < sizeof(PubKeyResp))
+        return;
+    PubKeyResp rp;
+    deserialisePubKeyResp(pl, rp, 0);
+
+    /*  cache it  */
+    _userKeys[rp.userID] =
+        *reinterpret_cast<const std::array<uint8_t, 32> *>(rp.publicKey);
+
+    if (_myNodeID == base.originNodeID)
+    {
+        /* push to phone(s) – Outgoing uses from==userID, data==pk           */
+        _clientNotifier->notify(
+            Outgoing{BleType::BLE_PUBKEY_RESP,
+                     0, rp.userID,
+                     rp.publicKey, 32});
+        return;
+    }
+
+    /*  else forward towards the original requester                       */
+    RouteEntry re;
+    if (!getRoute(base.originNodeID, re))
+        return;
+
+    BaseHeader fwd = base;
+    fwd.destNodeID = re.nextHop;
+    fwd.prevHopID = _myNodeID;
+    fwd.hopCount++;
+
+    transmitPacket(fwd, pl, len);
+}
+
 // HELPER FUNCTIONS: sendRREQ, sendRREP, sendRERR
 
 void AODVRouter::sendRREQ(uint32_t destNodeID)
@@ -1333,6 +1413,53 @@ void AODVRouter::sendACK(uint32_t destNodeID, uint32_t originalPacketID)
     ah.originalPacketID = originalPacketID;
 
     transmitPacket(bh, reinterpret_cast<uint8_t *>(&ah), sizeof(ACKHeader));
+}
+
+void AODVRouter::sendPubKeyReq(uint32_t targetUserID)
+{
+    Serial.println("Sending pub key req");
+    /*  If we already have the key locally just bail out – the BLE
+        side will read from _userKeys.                               */
+    if (_userKeys.count(targetUserID))
+        return;
+
+    /*  Choose where to send the query:
+        – If we know the user’s home-node, unicast there.
+        – else broadcast.                                             */
+    uint32_t dest = BROADCAST_ADDR; // this is the simplest option right now
+    GutEntry ge;
+    if (getGutEntry(targetUserID, ge))
+        dest = ge.nodeID;
+
+    BaseHeader bh{};
+    bh.destNodeID = dest;
+    bh.prevHopID = _myNodeID;
+    bh.originNodeID = _myNodeID;
+    bh.packetID = esp_random();
+    bh.packetType = PKT_PUBKEY_REQ;
+    bh.hopCount = 0;
+    bh.flags = 0;
+
+    PubKeyReq rq{targetUserID};
+    transmitPacket(bh, reinterpret_cast<const uint8_t *>(&rq), sizeof(rq));
+}
+
+void AODVRouter::sendPubKeyResp(uint32_t destNodeID, uint32_t targetUserID, uint32_t originNodeID, const uint8_t pk[32])
+{
+    BaseHeader bh{};
+    bh.destNodeID = destNodeID;
+    bh.prevHopID = _myNodeID;
+    bh.originNodeID = originNodeID; // original node that sent the message
+    bh.packetID = esp_random();
+    bh.packetType = PKT_PUBKEY_RESP;
+    bh.hopCount = 0;
+    bh.flags = 0;
+
+    PubKeyResp rp{};
+    rp.userID = targetUserID;
+    memcpy(rp.publicKey, pk, 32);
+
+    transmitPacket(bh, reinterpret_cast<const uint8_t *>(&rp), sizeof(rp));
 }
 
 // DATA BUFFER HELPER FUNCTIONS
@@ -1796,6 +1923,10 @@ bool AODVRouter::isGateway(uint32_t n) const
 {
     Lock l(_gwMtx);
     return _gateways.count(n);
+}
+
+void AODVRouter::addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey) {
+    _userKeys[userID] = publicKey;
 }
 
 /*

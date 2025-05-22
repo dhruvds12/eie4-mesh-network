@@ -134,7 +134,26 @@ private:
         GATEWAY_OFFLINE = 0x0B,
         ACK_SUCCESS = 0x0C,
         USER_MSG_ACCEPTED = 0x10,
+        BLE_ANNOUNCE_KEY = 0x0D,
+        BLE_REQUEST_PUBKEY = 0x0E,
+        BLE_PUBKEY_RESP = 0x0F,
+        ENC_USER_MSG = 0x11
+
     };
+
+    static std::string encodePubKey(uint32_t userID, const uint8_t pk[32])
+    {
+        std::string s;
+        s.reserve(1 + 4 + 4 + 32);
+        s.push_back(char(BLE_PUBKEY_RESP));
+        /* to = userID, from = 0 */
+        for (int b = 0; b < 4; ++b)
+            s.push_back(char((userID >> (8 * b)) & 0xFF));
+        for (int b = 0; b < 4; ++b)
+            s.push_back(0);
+        s.append(reinterpret_cast<const char *>(pk), 32);
+        return s;
+    }
 
     void recordConnection(const NimBLEConnInfo &connInfo);
     void removeConnection(const NimBLEConnInfo &connInfo);

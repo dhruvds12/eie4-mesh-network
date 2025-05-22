@@ -130,6 +130,8 @@ public:
 
     void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
+    void sendPubKeyReq(uint32_t targetUserID);
+
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
     std::vector<uint32_t> getKnownNodeIDs() const;
@@ -140,6 +142,10 @@ public:
     // TODO: add mutex to these calls.
     bool haveGateway() const;
     bool isGateway(uint32_t n) const;
+
+    std::unordered_map<uint32_t, std::array<uint8_t,32>> _userKeys;
+
+    void addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey);
 
 private:
     /*
@@ -310,6 +316,10 @@ private:
 
     void handleACK(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
+    void handlePubKeyReq(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    void handlePubKeyResp(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
     // SEND PACKET HELPER FUNCTIONS
 
     /**
@@ -345,6 +355,8 @@ private:
     void sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeID, uint32_t originalPacketID, uint32_t nextHop);
 
     void sendACK(uint32_t destNodeID, uint32_t originalPacketID);
+
+    void sendPubKeyResp(uint32_t destNodeID, uint32_t targetUserID, uint32_t originNodeID, const uint8_t pk[32]);
 
     /**
      * @brief
