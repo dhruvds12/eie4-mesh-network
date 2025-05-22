@@ -13,6 +13,22 @@
 #include <unordered_map>
 #include "userSessionManager.h"
 #include "IClientNotifier.h"
+#include "crypto/crypto.h"
+
+static constexpr size_t NONCE_LEN = 12;
+static constexpr size_t TAG_LEN = 8;
+
+/* 12-byte nonce layout:
+   [0..3] originNodeID  | [4..7] packetID | [8] hopCount | [9] pktType | [10..11] 0 */
+static inline void buildNonce(const BaseHeader &bh, uint8_t nonce[NONCE_LEN])
+{
+    memcpy(nonce, &bh.originNodeID, 4);
+    memcpy(nonce + 4, &bh.packetID, 4);
+    nonce[8] = bh.hopCount;
+    nonce[9] = bh.packetType;
+    nonce[10] = 0;
+    nonce[11] = 0;
+}
 
 class GatewayManager;
 
@@ -52,6 +68,7 @@ struct ackBufferEntry
     size_t length;
     uint32_t expectedNextHop; // the next hop node you expect to forward the packet
     TickType_t timestamp;     // time when the packet was sent
+    uint8_t attempts;         // number of retransmissions
 };
 
 // per‑user cache entry
@@ -70,8 +87,15 @@ struct NeighInfo
     uint8_t bloom[8];
 };
 
+static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(3000);
+static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
+static const uint8_t MAX_RETRANS = 3;
 static const uint32_t BROADCAST_NOTIFY_BIT = (1u << 0);
 static const uint32_t CLEANUP_NOTIFY_BIT = (1u << 1);
+
+// add the required flags for hop limits
+static const uint8_t routeReplyThreshold = 2;
+static const uint8_t userReplyThreshold = 2;
 
 class AODVRouter : public IRouter
 {
@@ -106,6 +130,8 @@ public:
 
     void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
+    void sendPubKeyReq(uint32_t targetUserID);
+
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
     std::vector<uint32_t> getKnownNodeIDs() const;
@@ -116,6 +142,10 @@ public:
     // TODO: add mutex to these calls.
     bool haveGateway() const;
     bool isGateway(uint32_t n) const;
+
+    std::unordered_map<uint32_t, std::array<uint8_t,32>> _userKeys;
+
+    void addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey);
 
 private:
     /*
@@ -186,9 +216,6 @@ private:
     std::unordered_set<uint32_t> _gateways;
 
     // Timers
-
-    static const TickType_t ACK_TIMEOUT_TICKS = pdMS_TO_TICKS(600000);       // 10 minutes
-    static const TickType_t ACK_CLEANUP_PERIOD_TICKS = pdMS_TO_TICKS(60000); // 1 minute
 
     // Functions:
 
@@ -287,6 +314,12 @@ private:
 
     void handleUserMessage(const BaseHeader &base, const uint8_t *payload, size_t payloadlen);
 
+    void handleACK(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    void handlePubKeyReq(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
+    void handlePubKeyResp(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
     // SEND PACKET HELPER FUNCTIONS
 
     /**
@@ -313,13 +346,18 @@ private:
      * @param originalDest
      * @param originalPacketID
      */
-    void sendRERR(uint32_t brokenNodeID, uint32_t senderNodeID, uint32_t originalDest, uint32_t originalPacketID);
+    void sendRERR(uint32_t brokenNodeID, uint32_t originNodeID, uint32_t originalDest, uint32_t originalPacketID);
 
     void sendUREQ(uint32_t userID);
 
     void sendUREP(uint32_t originNodeID, uint32_t destNodeID, uint32_t userID, uint32_t nextHop, uint16_t lifetime, uint8_t hopCount);
 
     void sendUERR(uint32_t userID, uint32_t nodeID, uint32_t originNodeID, uint32_t originalPacketID, uint32_t nextHop);
+
+    void sendACK(uint32_t destNodeID, uint32_t originalPacketID);
+
+    void sendPubKeyResp(uint32_t destNodeID, uint32_t targetUserID, uint32_t originNodeID, const uint8_t pk[32]);
+
     /**
      * @brief
      *

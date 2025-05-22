@@ -24,7 +24,9 @@ enum PacketType : uint8_t
     PKT_UREP = 0x10,
     PKT_UERR = 0x11,
     PKT_USER_MSG = 0x12,
-    //TODO new packet type for long range + multihop participation broadcast!!! 
+    PKT_PUBKEY_REQ = 0x13,
+    PKT_PUBKEY_RESP = 0x14,
+    // TODO new packet type for long range + multihop participation broadcast!!!
 
 };
 
@@ -32,27 +34,46 @@ enum flags : uint8_t
 {
     FROM_GATEWAY = 0x01, // message originated/destined from the gateway => this bypasses a lot of functionality ie routing table + GUT
     TO_GATEWAY = 0x02,
-    I_AM_GATEWAY = 0x03
+    I_AM_GATEWAY = 0x03,
+    REQ_ACK = 0x04,
+    ENC_MSG = 0x10
 };
 
+static constexpr uint8_t FLAG_ENCRYPTED = 0x80;
 static const uint32_t BROADCAST_ADDR = 0xFFFFFFFF;
 
-// Base Header (16 bytes)
+// Base header (20 bytes)
+/**
+ * @brief The base header (20 bytes).
+ *
+ * destNodeID      (4 bytes) - Next hop of the message or BroadcastAddr for broadcast msgs. See aodvRouter implementation for more details.
+ * prevHopID       (4 bytes) - The previous hop of the packet.
+ * originNodeID    (4 bytes) - constant byt means different things per packet type
+ *   • RREQ & UREQ:   original sender of the route request
+ *   • RREP & UREP:   sender of the route reply
+ *   • RERR & UERR:   sender of the error packet
+ *   • DATA, BROADCASTINFO, USER_MSG, ACK: original sender of the packet
+ * packetID        (4 bytes) - A random packet ID chosen by the sender; constant throughout its journey.
+ * packetType      (1 byte)  - Packet type identifier (see PacketType enum).
+ * flags           (1 byte)  - Bitmask for optional flags (see flags enum).
+ * hopCount        (1 byte)  - Number of hops (incremented +1 per hop).
+ * reserved        (1 byte)  - Reserved for future expansion.
+ */
 struct BaseHeader
 {
-    uint32_t destNodeID; // 4 bytes
-    uint32_t srcNodeID;  // 4 bytes
-    uint32_t packetID;   // 4 bytes
-    uint8_t packetType;  // 1 byte: 0x01=broadcast, 0x02=RREQ, 0x03=RREP, 0x04 = RERR, 0x05 = ACK, 0x06 = data
-    uint8_t flags;       // 1 byte: bitmask for options (e.g., WantAck)
-    uint8_t hopCount;    // 1 byte: TTL/hop count
-    uint8_t reserved;    // 1 byte: reserved
+    uint32_t destNodeID;   // 4 bytes
+    uint32_t prevHopID;    // 4 bytes
+    uint32_t originNodeID; // 4 bytes
+    uint32_t packetID;     // 4 bytes
+    uint8_t packetType;    // 1 byte: see PacketType
+    uint8_t flags;         // 1 byte: see flags enum
+    uint8_t hopCount;      // 1 byte: TTL/hop count
+    uint8_t reserved;      // 1 byte: reserved
 };
 
 // Extended header for RREQ (8 bytes)
 struct RREQHeader
 {
-    uint32_t originNodeID;   // 4 bytes: origin of the RREQ
     uint32_t RREQDestNodeID; // 4 bytes: Node ID we want to find route to
     // uint8_t currentHops;     // 1 byte:  Current number of hops
     // uint8_t rreqReserved;    // 1 byte:  reserved
@@ -62,7 +83,7 @@ struct RREQHeader
 #pragma pack(push, 1)
 struct RREPHeader
 {
-    uint32_t originNodeID;   // 4 bytes: original rreq requester
+    // uint32_t originNodeID;   // 4 bytes: original rreq requester
     uint32_t RREPDestNodeID; // 4 bytes: destination of route
     uint16_t lifetime;       // 2 bytes: route lifetime
     uint8_t numHops;         // 1 byte:  Number of hops using this route
@@ -76,7 +97,7 @@ struct RERRHeader
     uint32_t brokenNodeID;       // 4 bytes: Broken nodeID
     uint32_t originalDestNodeID; // 4 bytes: Original intended destination
     uint32_t originalPacketID;   // 4 bytes: Original packetID that will have been overwritten
-    uint32_t senderNodeID;       // 4 bytes: The original sender
+    // uint32_t originNodeID;       // 4 bytes: The original sender
 };
 
 // Extended header for ACk (4 bytes)
@@ -89,31 +110,27 @@ struct ACKHeader
 struct DATAHeader
 {
     uint32_t finalDestID; // 4 bytes: final intended target
-};
-
-struct BROADCASTINFOHeader
-{
-    uint32_t originNodeID;
+    // uint32_t originNodeID; // 4 bytes: original sender
 };
 
 #pragma pack(push, 1)
 struct DiffBroadcastInfoHeader
 {
-    uint32_t originNodeID; // 4 B
-    uint16_t numAdded;     // 2 B
-    uint16_t numRemoved;   // 2 B
+    // uint32_t originNodeID; // 4 B
+    uint16_t numAdded;   // 2 B
+    uint16_t numRemoved; // 2 B
 };
 #pragma pack(pop)
 
 struct UREQHeader
 {
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t userID;
 };
 
 struct UREPHeader
 {
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t destNodeID;
     uint32_t userID;
     uint16_t lifetime;
@@ -124,7 +141,7 @@ struct UERRHeader
 {
     uint32_t userID;
     uint32_t nodeID;
-    uint32_t originNodeID;
+    // uint32_t originNodeID;
     uint32_t originalPacketID;
 };
 
@@ -133,6 +150,18 @@ struct UserMsgHeader
     uint32_t fromUserID;
     uint32_t toUserID;
     uint32_t toNodeID;
+    // uint32_t originNodeID;
+};
+
+struct PubKeyReq
+{
+    uint32_t userID; // target userID
+};
+
+struct PubKeyResp
+{
+    uint32_t userID;       // 4 bytes
+    uint8_t publicKey[32]; // 32bytes
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -146,7 +175,9 @@ inline size_t serialiseBaseHeader(const BaseHeader &header, uint8_t *buffer)
     size_t offset = 0;
     memcpy(buffer + offset, &header.destNodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.srcNodeID, 4);
+    memcpy(buffer + offset, &header.prevHopID, 4);
+    offset += 4;
+    memcpy(buffer + offset, &header.originNodeID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.packetID, 4);
     offset += 4;
@@ -162,7 +193,9 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
     size_t offset = 0;
     memcpy(&header.destNodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.srcNodeID, buffer + offset, 4);
+    memcpy(&header.prevHopID, buffer + offset, 4);
+    offset += 4;
+    memcpy(&header.originNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.packetID, buffer + offset, 4);
     offset += 4;
@@ -179,8 +212,7 @@ inline size_t deserialiseBaseHeader(const uint8_t *buffer, BaseHeader &header)
 
 inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+
     memcpy(buffer + offset, &header.RREQDestNodeID, 4);
     offset += 4;
     // buffer[offset++] = header.currentHops;
@@ -190,8 +222,7 @@ inline size_t serialiseRREQHeader(const RREQHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+
     memcpy(&header.RREQDestNodeID, buffer + offset, 4);
     offset += 4;
     // header.currentHops = buffer[offset++];
@@ -204,8 +235,7 @@ inline size_t deserialiseRREQHeader(const uint8_t *buffer, RREQHeader &header, s
 // ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+
     memcpy(buffer + offset, &header.RREPDestNodeID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.lifetime, 2);
@@ -216,8 +246,6 @@ inline size_t serialiseRREPHeader(const RREPHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseRREPHeader(const uint8_t *buffer, RREPHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
     memcpy(&header.RREPDestNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.lifetime, buffer + offset, 2);
@@ -240,8 +268,6 @@ inline size_t serialiseRERRHeader(const RERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.senderNodeID, 4);
-    offset += 4;
     return offset;
 }
 
@@ -254,8 +280,6 @@ inline size_t deserialiseRERRHeader(const uint8_t *buffer, RERRHeader &header, s
     memcpy(&header.originalDestNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.originalPacketID, buffer + offset, 4);
-    offset += 4;
-    memcpy(&header.senderNodeID, buffer + offset, 4);
     offset += 4;
     return offset;
 }
@@ -286,6 +310,8 @@ inline size_t serialiseDATAHeader(const DATAHeader &data, uint8_t *buffer, size_
 {
     memcpy(buffer + offset, &data.finalDestID, 4);
     offset += 4;
+    // memcpy(buffer + offset, &data.originNodeID, 4);
+    // offset += 4;
     return offset;
 }
 
@@ -293,6 +319,8 @@ inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, siz
 {
     memcpy(&data.finalDestID, buffer + offset, 4);
     offset += 4;
+    // memcpy(&data.originNodeID, buffer + offset, 4);
+    // offset += 4;
     return offset;
 }
 
@@ -300,17 +328,22 @@ inline size_t deserialiseDATAHeader(const uint8_t *buffer, DATAHeader &data, siz
 // BroadcastInfo
 // ──────────────────────────────────────────────────────────────────────────────
 
-inline size_t serialiseBroadcastInfoHeader(const BROADCASTINFOHeader &data, uint8_t *buffer, size_t offset)
+inline size_t serialiseBroadcastInfoHeader(const DiffBroadcastInfoHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &data.originNodeID, 4);
-    offset += 4;
+
+    memcpy(buffer + offset, &header.numAdded, 2);
+    offset += 2;
+    memcpy(buffer + offset, &header.numRemoved, 2);
+    offset += 2;
     return offset;
 }
 
-inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, BROADCASTINFOHeader &data, size_t offset)
+inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, DiffBroadcastInfoHeader &header, size_t offset)
 {
-    memcpy(&data.originNodeID, buffer + offset, 4);
-    offset += 4;
+    memcpy(&header.numAdded, buffer + offset, 2);
+    offset += 2;
+    memcpy(&header.numRemoved, buffer + offset, 2);
+    offset += 2;
     return offset;
 }
 
@@ -320,8 +353,8 @@ inline size_t deserialiseBroadcastInfoHeader(const uint8_t *buffer, BROADCASTINF
 inline size_t serialiseUREQHeader(const UREQHeader &header, uint8_t *buffer, size_t offset)
 {
     // originNodeID
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     // userID
     memcpy(buffer + offset, &header.userID, 4);
     offset += 4;
@@ -330,8 +363,8 @@ inline size_t serialiseUREQHeader(const UREQHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseUREQHeader(const uint8_t *buffer, UREQHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.userID, buffer + offset, 4);
     offset += 4;
     return offset;
@@ -342,8 +375,8 @@ inline size_t deserialiseUREQHeader(const uint8_t *buffer, UREQHeader &header, s
 // ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialiseUREPHeader(const UREPHeader &header, uint8_t *buffer, size_t offset)
 {
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     memcpy(buffer + offset, &header.destNodeID, 4);
     offset += 4;
     memcpy(buffer + offset, &header.userID, 4);
@@ -356,8 +389,8 @@ inline size_t serialiseUREPHeader(const UREPHeader &header, uint8_t *buffer, siz
 
 inline size_t deserialiseUREPHeader(const uint8_t *buffer, UREPHeader &header, size_t offset)
 {
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.destNodeID, buffer + offset, 4);
     offset += 4;
     memcpy(&header.userID, buffer + offset, 4);
@@ -377,8 +410,8 @@ inline size_t serialiseUERRHeader(const UERRHeader &header, uint8_t *buffer, siz
     offset += 4;
     memcpy(buffer + offset, &header.nodeID, 4);
     offset += 4;
-    memcpy(buffer + offset, &header.originNodeID, 4);
-    offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
     memcpy(buffer + offset, &header.originalPacketID, 4);
     offset += 4;
     return offset;
@@ -390,8 +423,8 @@ inline size_t deserialiseUERRHeader(const uint8_t *buffer, UERRHeader &header, s
     offset += 4;
     memcpy(&header.nodeID, buffer + offset, 4);
     offset += 4;
-    memcpy(&header.originNodeID, buffer + offset, 4);
-    offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     memcpy(&header.originalPacketID, buffer + offset, 4);
     offset += 4;
     return offset;
@@ -408,6 +441,9 @@ inline size_t serialiseUserMsgHeader(const UserMsgHeader &header, uint8_t *buffe
     offset += 4;
     memcpy(buffer + offset, &header.toNodeID, 4);
     offset += 4;
+    // memcpy(buffer + offset, &header.originNodeID, 4);
+    // offset += 4;
+
     return offset;
 }
 
@@ -419,7 +455,40 @@ inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &hea
     offset += 4;
     memcpy(&header.toNodeID, buffer + offset, 4);
     offset += 4;
+    // memcpy(&header.originNodeID, buffer + offset, 4);
+    // offset += 4;
     return offset;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  PUB-KEY request / response
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialisePubKeyReq(const PubKeyReq &h, uint8_t *buf, size_t off)
+{
+    memcpy(buf + off, &h.userID, 4);
+    return off + 4;
+}
+inline size_t deserialisePubKeyReq(const uint8_t *buf, PubKeyReq &h, size_t off)
+{
+    memcpy(&h.userID, buf + off, 4);
+    return off + 4;
+}
+
+inline size_t serialisePubKeyResp(const PubKeyResp &h, uint8_t *buf, size_t off)
+{
+    memcpy(buf + off, &h.userID, 4);
+    off += 4;
+    memcpy(buf + off, h.publicKey, 32);
+    off += 32;
+    return off;
+}
+inline size_t deserialisePubKeyResp(const uint8_t *buf, PubKeyResp &h, size_t off)
+{
+    memcpy(&h.userID, buf + off, 4);
+    off += 4;
+    memcpy(h.publicKey, buf + off, 32);
+    off += 32;
+    return off;
 }
 
 #endif

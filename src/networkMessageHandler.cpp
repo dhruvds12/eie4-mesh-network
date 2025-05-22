@@ -59,6 +59,11 @@ bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destNodeID, co
     return true;
 }
 
+void NetworkMessageHandler::announcePubKey(uint32_t userID, const uint8_t pk[32])
+{
+    _router->addPubKey(userID, *reinterpret_cast<const std::array<uint8_t, 32> *>(pk));
+}
+
 void NetworkMessageHandler::SenderTask(void *pvParameters)
 {
     NetworkMessageHandler *handler = static_cast<NetworkMessageHandler *>(pvParameters);
@@ -111,6 +116,19 @@ void NetworkMessageHandler::processQueue()
                         Serial.println("Message from user dropped no access to a Gateway");
                     }
                 }
+            }
+            else if (msg.kind == MsgKind::REQ_PUB_KEY)
+            {
+
+                _router->sendPubKeyReq(msg.destID);
+            }
+            else if (msg.kind == MsgKind::ENC_USER)
+            {
+                _router->sendUserMessage(msg.userID,
+                                         msg.destID,
+                                         reinterpret_cast<const uint8_t *>(msg.message),
+                                         strlen(msg.message),
+                                         msg.flags);
             }
         }
     }

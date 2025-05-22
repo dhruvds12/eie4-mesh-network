@@ -26,6 +26,20 @@ struct BleOut
     uint32_t to;   // to a node or user -> depends on type
     uint32_t from; // from a node or a user -> depends on type
     std::vector<uint8_t> data;
+    uint32_t pktId;
+
+    explicit BleOut(BleType t,
+                    uint16_t ch,
+                    uint32_t to_ = 0,
+                    uint32_t from_ = 0,
+                    std::vector<uint8_t> d = {},
+                    uint32_t id = 0)
+        : type(t),
+          connHandle(ch),
+          to(to_),
+          from(from_),
+          data(std::move(d)),
+          pktId(id) {}
 };
 
 struct BleIn
@@ -105,7 +119,6 @@ private:
 
     uint32_t _nodeID;
 
-
     enum BLEMessageType : uint8_t
     {
         BROADCAST = 0x01,
@@ -119,13 +132,35 @@ private:
         GATEWAY_AVAILABLE = 0x09,
         USER_MSG_GATEWAY = 0x0A,
         GATEWAY_OFFLINE = 0x0B,
+        ACK_SUCCESS = 0x0C,
         USER_MSG_ACCEPTED = 0x10,
+        BLE_ANNOUNCE_KEY = 0x0D,
+        BLE_REQUEST_PUBKEY = 0x0E,
+        BLE_PUBKEY_RESP = 0x0F,
+        ENC_USER_MSG = 0x11
+
     };
+
+    static std::string encodePubKey(uint32_t userID, const uint8_t pk[32])
+    {
+        std::string s;
+        s.reserve(1 + 4 + 4 + 32);
+        s.push_back(char(BLE_PUBKEY_RESP));
+        /* to = userID, from = 0 */
+        for (int b = 0; b < 4; ++b)
+            s.push_back(char((userID >> (8 * b)) & 0xFF));
+        for (int b = 0; b < 4; ++b)
+            s.push_back(0);
+        s.append(reinterpret_cast<const char *>(pk), 32);
+        return s;
+    }
 
     void recordConnection(const NimBLEConnInfo &connInfo);
     void removeConnection(const NimBLEConnInfo &connInfo);
     void processIncomingMessage(uint16_t connHandle, const std::string &msg);
     void onLoRaMessage(uint32_t targetUserId, const std::string &payload);
+
+    std::string encodeAck(uint32_t pktId);
 
     void queueGatewayStatus(bool online);
 
@@ -156,7 +191,7 @@ private:
     CharacteristicCallbacks *_rxCallbacks;
 
     static std::vector<uint8_t> encodeListResponse(BLEMessageType type, const std::vector<uint32_t> &ids);
-    static std::string encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload);
+    static std::string encodeMessage(BLEMessageType type, uint32_t to, uint32_t from, const std::vector<uint8_t> &payload, uint32_t pktId = 0);
 };
 
 #endif
