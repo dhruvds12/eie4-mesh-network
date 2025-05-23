@@ -143,11 +143,13 @@ public:
     bool haveGateway() const;
     bool isGateway(uint32_t n) const;
 
-    std::unordered_map<uint32_t, std::array<uint8_t,32>> _userKeys;
-
     void addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey);
 
+    bool hasPubKey(uint32_t userID) const;
+    bool getPubKey(uint32_t userID, const std::array<uint8_t, 32>* &outPtr) const;
+
 private:
+    std::unordered_map<uint32_t, std::array<uint8_t, 32>> _userKeys;
     /*
     WARNING!!!!!!!!!!!!!
 
