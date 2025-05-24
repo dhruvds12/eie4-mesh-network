@@ -1035,6 +1035,17 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
             Serial.println("[AODVRouter] Received gateway user message");
             Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
             Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
+            if (_usm && !_usm->isOnline(umh.toUserID)) {
+                Serial.printf("Queued message for user %u", umh.toUserID);
+                /* cache for later */
+                OfflineMsg om{
+                    BleType::BLE_USER_GATEWAY,   // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                    umh.toUserID,
+                    umh.fromUserID,
+                    std::vector<uint8_t>(message, message + messageLen)};
+                _usm->queueOffline(umh.toUserID, om);
+                return;                         // nothing else to do now
+            }
             _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
         }
@@ -1044,13 +1055,38 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
             // TODO: need to properly extract the data without the header
             Serial.printf("[AODVRouter] Received ENCRYPTED USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
             Serial.printf("[AODVRouter] ENCRYPTED Data: %.*s\n", (int)messageLen, (const char *)message);
+            if (_usm && !_usm->isOnline(umh.toUserID)) {
+                Serial.printf("Queued message for user %u", umh.toUserID);
+                /* cache for later */
+                OfflineMsg om{
+                    BleType::BLE_ENC_UnicastUser,   // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                    umh.toUserID,
+                    umh.fromUserID,
+                    std::vector<uint8_t>(message, message + messageLen)};
+                _usm->queueOffline(umh.toUserID, om);
+                return;                         // nothing else to do now
+            }
             _clientNotifier->notify(Outgoing{BleType::BLE_ENC_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
         }
         Serial.println("[AODVRouter] Entered I am receiver path User Message");
         // TODO: need to properly extract the data without the header
+
         Serial.printf("[AODVRouter] Received USER Message for %u. PayloadLen=%u\n", umh.toUserID, (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)messageLen, (const char *)message);
+
+        if (_usm && !_usm->isOnline(umh.toUserID)) {
+            Serial.printf("Queued message for user %u", umh.toUserID);
+            /* cache for later */
+            OfflineMsg om{
+                BleType::BLE_UnicastUser,   // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                umh.toUserID,
+                umh.fromUserID,
+                std::vector<uint8_t>(message, message + messageLen)};
+            _usm->queueOffline(umh.toUserID, om);
+            return;                         // nothing else to do now
+        }
+
         _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
         return;
     }
