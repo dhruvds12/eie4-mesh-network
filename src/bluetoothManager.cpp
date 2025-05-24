@@ -347,6 +347,21 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                 std::vector<uint8_t>{1}};
             enqueueBleOut(pkt);
         }
+
+        // Pop any messages in the users inbox
+        std::vector<OfflineMsg> queued;
+        if (_userMgr->popInbox(sender, queued))
+        {
+            for (const auto &q : queued)
+            {
+                Outgoing o{q.type,
+                           q.to,
+                           q.from,
+                           q.data.data(),
+                           q.data.size()};
+                notify(o); 
+            }
+        }
     }
     break;
 
