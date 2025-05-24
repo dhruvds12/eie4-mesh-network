@@ -450,6 +450,17 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case BROADCAST:
     {
         _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, body.c_str());
+
+        // should send messages back to users that are connected to this node: 
+
+        std::vector<uint8_t> payload(body.begin(), body.end());
+        auto pkt = new BleOut{
+            BleType::BLE_Broadcast,
+            0,
+            sender, // swapped so that the phone accepts the message correctly --> not really required for broadcast
+            dest,   // swapped so that the phone accepts the message correctly --> not really required for broadcast
+            std::move(payload)};
+        enqueueBleOut(pkt);
     }
     break;
 
