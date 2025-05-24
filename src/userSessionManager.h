@@ -8,11 +8,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "set"
+#include "IClientNotifier.h"
+#include "deque"
 
 class MQTTManager;
 
 // Special value indicating no active BLE connection
 static const uint16_t INVALID_HANDLE = 0xFFFF;
+
+struct OfflineMsg
+{
+    BleType type;
+    uint32_t to;
+    uint32_t from;
+    std::vector<uint8_t> data;
+};
 
 struct UserInfo
 {
@@ -20,7 +30,8 @@ struct UserInfo
     uint16_t bleConnHandle; // INVALID_HANDLE if not connected
     bool isConnected;
     unsigned long lastSeen; // millis() timestamp of last activity
-    //TODO storage per user of messages
+    // TODO storage per user of messages
+    std::deque<OfflineMsg> inbox;
 };
 
 /**
@@ -35,10 +46,10 @@ struct UserInfo
  *
  * Example:
  * void someFunc{
- *   _usm.addOrRefresh(...);// <- takes write-lock 
+ *   _usm.addOrRefresh(...);// <- takes write-lock
  *   _usm.isOnline(...); // <- would try and take the write-lock again as part of a read
  * }
- * 
+ *
  * So if you’re still holding _writeMutex from the preceding addOrRefresh()’s writeLock(), then readLock() dead-locks when it tries to take _writeMutex again.
  */
 class UserSessionManager
@@ -76,6 +87,15 @@ public:
     void getAndClearDiff(std::vector<uint32_t> &added, std::vector<uint32_t> &removed);
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
+
+    /* called by anybody who wants to park a msg for an offline user */
+    void queueOffline(uint32_t userID, const OfflineMsg &m);
+
+    /**
+     * Move any queued packets for @p userID into @p out.
+     * Returns true if at least one message was moved.
+     */
+    bool popInbox(uint32_t userID, std::vector<OfflineMsg> &out);
 
 private:
     // Reader-writer lock implementation
