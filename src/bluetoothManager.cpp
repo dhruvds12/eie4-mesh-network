@@ -150,6 +150,10 @@ void BluetoothManager::bleTxWorker(void *pv)
                 raw = encodeMessage(ENC_USER_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
+            case BleType::BLE_NODE_ID:
+                raw = encodeMessage(NODE_ID, 0, pkt->from, pkt->data);
+                mgr->sendBroadcast(raw);
+                break;
 
             default:
                 break;
@@ -359,8 +363,17 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                            q.from,
                            q.data.data(),
                            q.data.size()};
-                notify(o); 
+                notify(o);
             }
+        }
+
+        {
+            std::vector<uint8_t> pl;
+            for (int b = 0; b < 4; ++b)
+                pl.push_back((_nodeID >> (8 * b)) & 0xFF);
+            auto pkt = new BleOut{BleType::BLE_NODE_ID, // reuse generic type
+                                  connHandle, 0, _nodeID, std::move(pl)};
+            enqueueBleOut(pkt);
         }
     }
     break;
@@ -451,7 +464,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
         _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, body.c_str());
 
-        // should send messages back to users that are connected to this node: 
+        // should send messages back to users that are connected to this node:
 
         std::vector<uint8_t> payload(body.begin(), body.end());
         auto pkt = new BleOut{
@@ -539,6 +552,21 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             Serial.println("Did not recognise sender");
         }
     }
+
+    case USER_MOVED:
+    {
+        /* dest   = oldNodeID (where the inbox lives)
+           sender = userID                                        */
+        uint32_t oldNodeID = dest;
+        uint32_t movedUser = sender;
+
+
+        _netHandler->enqueueMessage(MsgKind::MOVE_USER_REQ,
+                                    oldNodeID,
+                                    {}, // do not need this
+                                    movedUser);
+    }
+    break;
 
     default:
 
