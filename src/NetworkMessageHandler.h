@@ -18,6 +18,7 @@ enum class MsgKind : uint8_t
     FROM_GATEWAY = 3, // came from Internet, needs injecting
     REQ_PUB_KEY = 4,
     ENC_USER = 5,
+    MOVE_USER_REQ = 6,
 };
 
 struct OutgoingMessage

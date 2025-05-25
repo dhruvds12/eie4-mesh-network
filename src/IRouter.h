@@ -21,6 +21,7 @@ public:
     virtual std::vector<uint32_t> getKnownUserIDs() const = 0;
     virtual bool haveGateway() const = 0;
     virtual void addPubKey(uint32_t userID, std::array<uint8_t, 32>) = 0;
+    virtual void sendMoveUserReq(uint32_t userID, uint32_t oldNodeID) = 0;
 };
 
 #endif

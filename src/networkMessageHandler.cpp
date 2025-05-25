@@ -130,6 +130,11 @@ void NetworkMessageHandler::processQueue()
                                          strlen(msg.message),
                                          msg.flags);
             }
+            else if (msg.kind == MsgKind::MOVE_USER_REQ)
+            {
+                /* userID   = moved user
+                   destID   = old nodeID                                 */
+                _router->sendMoveUserReq(msg.userID, msg.destID);
+            }
         }
     }
-}
