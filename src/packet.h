@@ -26,6 +26,7 @@ enum PacketType : uint8_t
     PKT_USER_MSG = 0x12,
     PKT_PUBKEY_REQ = 0x13,
     PKT_PUBKEY_RESP = 0x14,
+    PKT_MOVE_USER_REQ = 0x15
     // TODO new packet type for long range + multihop participation broadcast!!!
 
 };
@@ -162,6 +163,12 @@ struct PubKeyResp
 {
     uint32_t userID;       // 4 bytes
     uint8_t publicKey[32]; // 32bytes
+};
+
+struct MoveUserReqHeader
+{
+    uint32_t userID;
+    uint32_t destNodeID; 
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -488,6 +495,29 @@ inline size_t deserialisePubKeyResp(const uint8_t *buf, PubKeyResp &h, size_t of
     off += 4;
     memcpy(h.publicKey, buf + off, 32);
     off += 32;
+    return off;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+//  Move User Request
+// ──────────────────────────────────────────────────────────────────────────────
+inline size_t serialiseMoveUserReq(const MoveUserReqHeader &h,
+
+                                   uint8_t *buf, size_t off = 0)
+{
+    memcpy(buf + off, &h.userID, 4);
+    off += 4;
+    memcpy(buf + off, &h.destNodeID, 4);
+    off += 4;
+    return off;
+}
+inline size_t deserialiseMoveUserReq(const uint8_t *buf,
+                                     MoveUserReqHeader &h, size_t off = 0)
+{
+    memcpy(&h.userID, buf + off, 4);
+    off += 4;
+    memcpy(&h.destNodeID, buf + off, 4);
+    off += 4;
     return off;
 }
 
