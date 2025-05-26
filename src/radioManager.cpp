@@ -165,15 +165,22 @@ bool RadioManager::sendPacket(const uint8_t *data, size_t len)
 
 void RadioManager::dio1Isr()
 {
+    // xHigherPriorityTaskWoken flag tells FreeRTOS if giving the semaphore
+    // has unblocked a higher-priority task than the one currently running.
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if (_irqSemaphore)
     {
+
+        // FromISR variant is safe here: it atomically gives the binary semaphore
+        // to wake radioTask() without doing any heavy work in interrupt context.
         xSemaphoreGiveFromISR(_irqSemaphore, &xHigherPriorityTaskWoken);
     }
 
     // If we unblocked a task, yield to it
     if (xHigherPriorityTaskWoken)
     {
+        // If by giving the semaphore we’ve woken a task with higher priority,
+        // yield immediately to that task before returning from the ISR.
         portYIELD_FROM_ISR();
     }
 }
