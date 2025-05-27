@@ -1,38 +1,87 @@
 ```mermaid
-flowchart TD
-  subgraph UI Layer
-    A[Activity / Fragment]
-    B[ViewModel]
+flowchart TB
+  %% UI Layer
+  subgraph UI
+    MN[MainNavigation]
+    LS[LandingScreen]
+    SC[ScanScreen]
+    CL[ChatListScreen]
+    CH[ChatScreen]
+    DS[DiscoveryScreen]
+    PS[ProfileScreen]
   end
 
-  subgraph Domain Layer
-    B --> C[Repository Layer]
-    C --> D(BLERepository)
-    C --> E(CryptoRepository)
-    C --> F(DatabaseRepository)
+  %% ViewModel Layer
+  subgraph ViewModels
+    BSV[BleScanViewModel]
+    BCV[BleConnectViewModel]
+    CLV[ChatListVm]
+    DV[DiscoveryVm]
+    CHV[BleChatViewModel]
+    PV[ProfileVm]
   end
 
-  subgraph Data Layer
-    D --> G[BLE Mesh Manager]
-    E --> H[Crypto Engine]
-    F --> I[Room Database]
-    I --> J[ChatDAO]
-    I --> K[PublicKeyDAO]
+  %% Domain / Repositories
+  subgraph Domain
+    MR["MeshRepository\n(interface)"]
+    BMR[BleMeshRepository]
+    UNR[UserNetRepository]
   end
 
-  subgraph Key Management
-    H --> L["Android Keystore\n(Private Key)"]
-    K --> H
-    G --> E
+  %% Data Layer
+  subgraph Data
+    GMgr[AndroidGattManager]
+    BScan[AndroidBleScanner]
+    DB[MeshDb]
+    CD[ChatDao]
+    PK[PublicKeyDao]
+    CB[CryptoBox]
+    CO[ConnectivityObserver]
+    API[MessageApi]
+    PP[ProfilePrefs]
   end
 
-  %% Flows
-  A -->|User action| B
-  G -->|Data packets| H
-  H -->|Encrypted payloads| G
-  H -->|Store peer key| K
-  J -->|Persist chat| I
-  F -->|Load chats & keys| B
+  %% UI → Navigation
+  MN --> LS
+  MN --> SC
+  MN --> CL
+  MN --> CH
+  MN --> DS
+  MN --> PS
+
+  %% Screens → VMs
+  SC --> BSV
+  SC --> BCV
+  CL --> CLV
+  DS --> DV
+  CH --> CHV
+  PS --> PV
+
+  %% VMs → Repos / Services
+  BSV --> BScan
+  BCV --> GMgr
+  BCV --> MR
+  CLV --> MR
+  DV  --> BMR
+  CHV --> MR
+  CHV --> UNR
+  CHV --> CO
+  PV  --> PP
+
+  %% Domain interface → implementations
+  MR  --> BMR
+  BMR --> GMgr
+  BMR --> CD
+  BMR --> PK
+  BMR --> CB
+  UNR --> API
+  UNR --> CD
+  UNR --> CO
+
+  %% DAOs → Database
+  CD  --> DB
+  PK  --> DB
+
 
 
 ```
