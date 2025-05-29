@@ -3,7 +3,8 @@
 #ifdef UNIT_TEST
 /*  Tiny-AES-GCM (public domain) – only the bits we need
     so the unit tests build without ESP32 libraries.                 */
-#include "aes_gcm.h" // include your favourite minimal GCM impl
+// #include "aes_gcm.h"
+#include <string.h>
 #else
 #include "mbedtls/gcm.h"
 #endif
@@ -22,7 +23,6 @@ static bool gcm(bool encrypt,
                 const uint8_t *tag_in, uint8_t *tag_out, size_t tag_len)
 {
 #ifdef UNIT_TEST
-    /* your Tiny-AES-GCM wrapper here */
     (void)encrypt;
     (void)nonce;
     (void)nonce_len;

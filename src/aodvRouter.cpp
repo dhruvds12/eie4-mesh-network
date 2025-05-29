@@ -1,6 +1,6 @@
 #include "AODVRouter.h"
 #include <Arduino.h>
-#include "gatewayManager.h"
+#include <gatewayManager.h>
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 

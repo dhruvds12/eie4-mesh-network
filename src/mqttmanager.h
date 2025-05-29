@@ -2,12 +2,19 @@
 #define MQTT_MANAGER_H
 
 #include <Arduino.h>
+#ifdef UNIT_TEST
+  #include "FreeRTOS.h"
+  #include "queue.h"
+  #include "task.h"
+#else
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#endif
 #include "IRadioManager.h"
 #include <ArduinoJson.h>
 #include "NetworkMessageHandler.h"
+
 
 extern "C"
 {
