@@ -98,7 +98,7 @@ void NetworkMessageHandler::processQueue()
                 {
                     Serial.print("Sent message to uplink\n");
                     // forward to GatewayManager queue – never touches the radio here
-                    _gwMgr->uplink(msg.userID, msg.destID, msg.message);
+                    _gwMgr->uplink(msg.userID, msg.destID, msg.message, msg.length);
                 }
                 else
                 {

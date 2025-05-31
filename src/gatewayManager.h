@@ -23,7 +23,8 @@ public:
     //  called by NMH for TO_GATEWAY traffic
     void uplink(uint32_t srcUser,
                 uint32_t dstUser,
-                const char *text);
+                const uint8_t *data,
+                size_t len);
 
     //  Wi-Fi event hooks
     void onWifiUp();
@@ -37,7 +38,8 @@ private:
         char id[13]; // 12-char randID + '\0'
         uint32_t from;
         uint32_t to;
-        char body[200];
+        size_t len;
+        uint8_t body[200];
     };
 
     static void syncTask(void *pv);
@@ -47,12 +49,13 @@ private:
 
     QueueHandle_t _txQ;
     EventGroupHandle_t _evt;
-    enum : EventBits_t {
-        WIFI_READY = 1 << 0,   // set while STA connected/Got-IP
-        GW_EVT_ON  = 1 << 1,   // edge – tell BLE “gateway became online”
-        GW_EVT_OFF = 1 << 2    // edge – tell BLE “gateway went offline”
+    enum : EventBits_t
+    {
+        WIFI_READY = 1 << 0, // set while STA connected/Got-IP
+        GW_EVT_ON = 1 << 1,  // edge – tell BLE “gateway became online”
+        GW_EVT_OFF = 1 << 2  // edge – tell BLE “gateway went offline”
     };
-    
+
     void wifiEventTask();
     bool registerNode();
 
