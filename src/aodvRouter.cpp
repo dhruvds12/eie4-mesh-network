@@ -1771,10 +1771,11 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
     offset += plainLen + TAG_LEN; /* final packet length */
 
     /* ---- hand to radio + bookkeeping (unchanged) ------------------ */
+    Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
     if (_mqttManager && _mqttManager->connected)
         // TODO: verify is this encrypted
         _mqttManager->publishPacket(hdrOut.packetID, buffer, offset);
-
+        
     if (!_radioManager->enqueueTxPacket(buffer, offset))
     {
         Serial.println("[AODV] enqueueTxPacket failed");

@@ -413,7 +413,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
         // destA = target nodeID
         Serial.printf("Node_msg for %u from %u\n", dest, sender);
-        _netHandler->enqueueMessage(MsgKind::NODE, dest, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size());
 
         // Need to send the message back to the node as well for other users connected to see
         // TODO: this means that sender will get the message back. --> either phone needs to discard or we never send it to the phone
@@ -434,7 +434,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::USER, dest, body.c_str(), sender);
+            _netHandler->enqueueMessage(MsgKind::USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
 
             if (pktId)
             {
@@ -462,7 +462,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BROADCAST:
     {
-        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size());
 
         // should send messages back to users that are connected to this node:
 
@@ -483,7 +483,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, body.c_str(), sender, TO_GATEWAY);
+            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, TO_GATEWAY);
         }
         else
         {
@@ -521,7 +521,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
         uint32_t target = dest; /* caller put userID in dest field   */
         Serial.printf("Requested user public key for user: %u\n", target);
-        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size());
         /* remember who asked so we know which connection to answer on */
         // _userMgr->rememberKeyWaiter(target, connHandle);
         break;
@@ -530,7 +530,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case ENC_USER_MSG:
     {
         Serial.println("Received an encrypted message");
-        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, body.c_str(), sender, ENC_MSG);
+        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, ENC_MSG);
 
         if (pktId)
         {

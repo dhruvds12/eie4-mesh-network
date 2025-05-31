@@ -27,7 +27,8 @@ struct OutgoingMessage
     uint8_t flags;   // still carries FROM_GATEWAY / TO_GATEWAY bits
     uint32_t destID; // node-ID *or* user-ID (see kind)
     uint32_t userID; // source user (USER / TO_GATEWAY / FROM_GATEWAY)
-    char message[128];
+    size_t length;
+    uint8_t message[200];
 };
 
 class NetworkMessageHandler
@@ -49,7 +50,7 @@ public:
      * @return true
      * @return false
      */
-    bool enqueueMessage(MsgKind kind, uint32_t destID, const char *message, uint32_t userID = 0, uint8_t flags = 0);
+    bool enqueueMessage(MsgKind kind, uint32_t destID,const uint8_t* data, size_t len, uint32_t userID = 0, uint8_t flags = 0);
 
     void announcePubKey(uint32_t userID, const uint8_t pk[32]);
 

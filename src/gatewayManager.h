@@ -37,7 +37,7 @@ private:
         char id[13]; // 12-char randID + '\0'
         uint32_t from;
         uint32_t to;
-        char body[128];
+        char body[200];
     };
 
     static void syncTask(void *pv);
