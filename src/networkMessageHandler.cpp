@@ -124,6 +124,7 @@ void NetworkMessageHandler::processQueue()
             }
             else if (msg.kind == MsgKind::ENC_USER)
             {
+                Serial.println("Sending encoded messages to other user");
                 _router->sendUserMessage(msg.userID,
                                          msg.destID,
                                          reinterpret_cast<const uint8_t *>(msg.message),
@@ -138,3 +139,4 @@ void NetworkMessageHandler::processQueue()
             }
         }
     }
+}

@@ -392,8 +392,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             std::move(resp)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case LIST_USERS_REQ:
     {
@@ -406,8 +406,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             std::move(resp)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case NODE_MSG:
     {
@@ -425,8 +425,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             dest,   // swapped so that the phone accepts the message correctly
             std::move(payload)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case USER_MSG:
     {
@@ -457,8 +457,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                 Serial.println("Did not recognise sender");
             }
         }
+        break;
     }
-    break;
 
     case BROADCAST:
     {
@@ -474,8 +474,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             dest,   // swapped so that the phone accepts the message correctly --> not really required for broadcast
             std::move(payload)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case USER_MSG_GATEWAY:
     {
@@ -489,6 +489,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         {
             Serial.println("Did not recognise sender");
         }
+        break;
     }
 
     case BLE_ANNOUNCE_KEY:
@@ -551,6 +552,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         {
             Serial.println("Did not recognise sender");
         }
+        break;
     }
 
     case USER_MOVED:
@@ -560,13 +562,12 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         uint32_t oldNodeID = dest;
         uint32_t movedUser = sender;
 
-
         _netHandler->enqueueMessage(MsgKind::MOVE_USER_REQ,
                                     oldNodeID,
                                     {}, // do not need this
                                     movedUser);
+        break;
     }
-    break;
 
     default:
 
