@@ -137,7 +137,9 @@ private:
         BLE_ANNOUNCE_KEY = 0x0D,
         BLE_REQUEST_PUBKEY = 0x0E,
         BLE_PUBKEY_RESP = 0x0F,
-        ENC_USER_MSG = 0x11
+        ENC_USER_MSG = 0x11,
+        USER_MOVED = 0x12, // phone → node 
+        NODE_ID = 0x13     // node  → phone 
 
     };
 

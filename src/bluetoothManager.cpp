@@ -150,6 +150,10 @@ void BluetoothManager::bleTxWorker(void *pv)
                 raw = encodeMessage(ENC_USER_MSG, pkt->to, pkt->from, pkt->data);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
+            case BleType::BLE_NODE_ID:
+                raw = encodeMessage(NODE_ID, 0, pkt->from, pkt->data);
+                mgr->sendBroadcast(raw);
+                break;
 
             default:
                 break;
@@ -347,6 +351,30 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                 std::vector<uint8_t>{1}};
             enqueueBleOut(pkt);
         }
+
+        // Pop any messages in the users inbox
+        std::vector<OfflineMsg> queued;
+        if (_userMgr->popInbox(sender, queued))
+        {
+            for (const auto &q : queued)
+            {
+                Outgoing o{q.type,
+                           q.to,
+                           q.from,
+                           q.data.data(),
+                           q.data.size()};
+                notify(o);
+            }
+        }
+
+        {
+            std::vector<uint8_t> pl;
+            for (int b = 0; b < 4; ++b)
+                pl.push_back((_nodeID >> (8 * b)) & 0xFF);
+            auto pkt = new BleOut{BleType::BLE_NODE_ID, // reuse generic type
+                                  connHandle, 0, _nodeID, std::move(pl)};
+            enqueueBleOut(pkt);
+        }
     }
     break;
 
@@ -364,8 +392,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             std::move(resp)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case LIST_USERS_REQ:
     {
@@ -378,14 +406,14 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             std::move(resp)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case NODE_MSG:
     {
         // destA = target nodeID
         Serial.printf("Node_msg for %u from %u\n", dest, sender);
-        _netHandler->enqueueMessage(MsgKind::NODE, dest, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size());
 
         // Need to send the message back to the node as well for other users connected to see
         // TODO: this means that sender will get the message back. --> either phone needs to discard or we never send it to the phone
@@ -397,8 +425,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             dest,   // swapped so that the phone accepts the message correctly
             std::move(payload)};
         enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case USER_MSG:
     {
@@ -406,7 +434,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::USER, dest, body.c_str(), sender);
+            _netHandler->enqueueMessage(MsgKind::USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
 
             if (pktId)
             {
@@ -429,14 +457,25 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                 Serial.println("Did not recognise sender");
             }
         }
+        break;
     }
-    break;
 
     case BROADCAST:
     {
-        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size());
+
+        // should send messages back to users that are connected to this node:
+
+        std::vector<uint8_t> payload(body.begin(), body.end());
+        auto pkt = new BleOut{
+            BleType::BLE_Broadcast,
+            0,
+            sender, // swapped so that the phone accepts the message correctly --> not really required for broadcast
+            dest,   // swapped so that the phone accepts the message correctly --> not really required for broadcast
+            std::move(payload)};
+        enqueueBleOut(pkt);
+        break;
     }
-    break;
 
     case USER_MSG_GATEWAY:
     {
@@ -444,12 +483,13 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, body.c_str(), sender, TO_GATEWAY);
+            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, TO_GATEWAY);
         }
         else
         {
             Serial.println("Did not recognise sender");
         }
+        break;
     }
 
     case BLE_ANNOUNCE_KEY:
@@ -479,9 +519,14 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BLE_REQUEST_PUBKEY:
     {
+        if (sender == 0)
+        {
+            Serial.println("ERROR: Sender equals 0 in BLE_REQUEST_PUBKEY breaking -- no PUBKEY REQUEST");
+            break;
+        }
         uint32_t target = dest; /* caller put userID in dest field   */
         Serial.printf("Requested user public key for user: %u\n", target);
-        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, body.c_str());
+        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
         /* remember who asked so we know which connection to answer on */
         // _userMgr->rememberKeyWaiter(target, connHandle);
         break;
@@ -490,7 +535,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case ENC_USER_MSG:
     {
         Serial.println("Received an encrypted message");
-        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, body.c_str(), sender, ENC_MSG);
+        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, ENC_MSG);
 
         if (pktId)
         {
@@ -512,6 +557,21 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         {
             Serial.println("Did not recognise sender");
         }
+        break;
+    }
+
+    case USER_MOVED:
+    {
+        /* dest   = oldNodeID (where the inbox lives)
+           sender = userID                                        */
+        uint32_t oldNodeID = dest;
+        uint32_t movedUser = sender;
+
+        _netHandler->enqueueMessage(MsgKind::MOVE_USER_REQ,
+                                    oldNodeID,
+                                    {}, // do not need this
+                                    movedUser);
+        break;
     }
 
     default:

@@ -29,26 +29,32 @@ void GatewayManager::begin()
         2048, this, 3, nullptr);
 }
 
-void GatewayManager::uplink(uint32_t src, uint32_t dst, const char *msg)
+void GatewayManager::uplink(uint32_t src, uint32_t dst,
+                            const uint8_t *data, size_t len)
 {
+    UplinkMsg m{};
 
-    UplinkMsg m;
-
-    for (int i = 0; i < 12; ++i)
-    {
+    /* random 12-char msgId */
+    for (int i = 0; i < 12; ++i) {
         uint8_t v = esp_random() % 36;
-        m.id[i] = v < 10 ? '0' + v : 'a' + (v - 10);
+        m.id[i]   = (v < 10) ? ('0' + v) : ('a' + v - 10);
     }
-
     m.id[12] = '\0';
 
     m.from = src;
-    m.to = dst;
-    strlcpy(m.body, msg, sizeof(m.body));
+    m.to   = dst;
+    m.len  = (len > sizeof(m.body)) ? sizeof(m.body) : len;
+    memcpy(m.body, data, m.len);
 
-    /* enqueue immediately, no block if queue is full */
-    xQueueSend(_txQ, &m, 0);
+    /* make sure body is NUL-terminated so String() stops cleanly */
+    if (m.len < sizeof(m.body))
+        m.body[m.len] = '\0';
+    else
+        m.body[sizeof(m.body) - 1] = '\0';
+
+    xQueueSend(_txQ, &m, 0);   
 }
+
 
 bool GatewayManager::isOnline() const
 {
@@ -196,6 +202,7 @@ bool GatewayManager::oneSync()
     for (JsonObject j : resp["down"].as<JsonArray>())
     {
         const char *txt = j["body"] | "";
+        size_t txtLen   = strlen(txt);  
         uint32_t src = strtoul(j["src"], nullptr, 10);
         uint32_t dst = strtoul(j["dst"], nullptr, 10);
 
@@ -226,7 +233,7 @@ bool GatewayManager::oneSync()
             Serial.printf("Received gatewat message for user %u\n", dst);
             _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
                                  dst,
-                                 txt,
+                                 (const uint8_t*)txt, txtLen,
                                  src,
                                  FROM_GATEWAY);
         }

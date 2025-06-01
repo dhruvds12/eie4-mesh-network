@@ -41,16 +41,15 @@ NetworkMessageHandler::~NetworkMessageHandler()
     }
 }
 
-bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destNodeID, const char *message, uint32_t userID, uint8_t flags)
+bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destID, const uint8_t *data, size_t len, uint32_t userID, uint8_t flags)
 {
-    OutgoingMessage msg;
-    msg.flags = flags;
-    msg.destID = destNodeID;
+    OutgoingMessage msg{};
     msg.kind = kind;
+    msg.flags = flags;
+    msg.destID = destID;
     msg.userID = userID;
-    // Safely copy the message into the fixed-size buffer.
-    strncpy(msg.message, message, sizeof(msg.message) - 1);
-    msg.message[sizeof(msg.message) - 1] = '\0';
+    msg.length = (len > sizeof(msg.message)) ? sizeof(msg.message) : len;
+    memcpy(msg.message, data, msg.length);
 
     if (xQueueSend(_sendQueue, &msg, pdMS_TO_TICKS(100)) != pdPASS)
     {
@@ -81,16 +80,16 @@ void NetworkMessageHandler::processQueue()
             if (msg.kind == MsgKind::NODE)
             {
                 _router->sendData(msg.destID,
-                                  reinterpret_cast<const uint8_t *>(msg.message),
-                                  strlen(msg.message),
+                                  msg.message,
+                                  msg.length,
                                   msg.flags);
             }
             else if (msg.kind == MsgKind::USER || msg.kind == MsgKind::FROM_GATEWAY)
             {
                 _router->sendUserMessage(msg.userID,
                                          msg.destID,
-                                         reinterpret_cast<const uint8_t *>(msg.message),
-                                         strlen(msg.message),
+                                         msg.message,
+                                         msg.length,
                                          msg.flags);
             }
             else if (msg.kind == MsgKind::TO_GATEWAY && _gwMgr)
@@ -99,7 +98,7 @@ void NetworkMessageHandler::processQueue()
                 {
                     Serial.print("Sent message to uplink\n");
                     // forward to GatewayManager queue – never touches the radio here
-                    _gwMgr->uplink(msg.userID, msg.destID, msg.message);
+                    _gwMgr->uplink(msg.userID, msg.destID, msg.message, msg.length);
                 }
                 else
                 {
@@ -107,8 +106,8 @@ void NetworkMessageHandler::processQueue()
                     {
                         _router->sendUserMessage(msg.userID,
                                                  msg.destID,
-                                                 reinterpret_cast<const uint8_t *>(msg.message),
-                                                 strlen(msg.message),
+                                                 msg.message,
+                                                 msg.length,
                                                  msg.flags);
                     }
                     else
@@ -120,15 +119,23 @@ void NetworkMessageHandler::processQueue()
             else if (msg.kind == MsgKind::REQ_PUB_KEY)
             {
 
-                _router->sendPubKeyReq(msg.destID);
+
+                _router->sendPubKeyReq(msg.destID, msg.userID);
             }
             else if (msg.kind == MsgKind::ENC_USER)
             {
+                Serial.println("Sending encoded messages to other user");
                 _router->sendUserMessage(msg.userID,
                                          msg.destID,
-                                         reinterpret_cast<const uint8_t *>(msg.message),
-                                         strlen(msg.message),
+                                         msg.message,
+                                         msg.length,
                                          msg.flags);
+            }
+            else if (msg.kind == MsgKind::MOVE_USER_REQ)
+            {
+                /* userID   = moved user
+                   destID   = old nodeID                                 */
+                _router->sendMoveUserReq(msg.userID, msg.destID);
             }
         }
     }

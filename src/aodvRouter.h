@@ -1,17 +1,19 @@
 #ifndef AODVROUTER_H
 #define AODVROUTER_H
 
-#include "IRouter.h"
-#include "IRadioManager.h"
-#include "packet.h"
 #include <map>
 #include <vector>
 #include <FreeRTOS.h>
 #include <unordered_set>
-#include "mqttmanager.h"
 #include <set>
 #include <unordered_map>
-#include "userSessionManager.h"
+#include <Arduino.h>
+
+#include "IRouter.h"
+#include "IRadioManager.h"
+#include "packet.h"
+#include <mqttmanager.h>
+#include <userSessionManager.h>
 #include "IClientNotifier.h"
 #include "crypto/crypto.h"
 
@@ -130,7 +132,9 @@ public:
 
     void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
-    void sendPubKeyReq(uint32_t targetUserID);
+    void sendPubKeyReq(uint32_t targetUserID, uint32_t senderUserID);
+
+    void sendMoveUserReq(uint32_t userID, uint32_t oldNodeID);
 
     void setMQTTManager(MQTTManager *mqttMgr) { _mqttManager = mqttMgr; }
 
@@ -146,7 +150,7 @@ public:
     void addPubKey(uint32_t userID, std::array<uint8_t, 32> publicKey);
 
     bool hasPubKey(uint32_t userID) const;
-    bool getPubKey(uint32_t userID, const std::array<uint8_t, 32>* &outPtr) const;
+    bool getPubKey(uint32_t userID, const std::array<uint8_t, 32> *&outPtr) const;
 
 private:
     std::unordered_map<uint32_t, std::array<uint8_t, 32>> _userKeys;
@@ -216,6 +220,8 @@ private:
 
     // Gateways
     std::unordered_set<uint32_t> _gateways;
+
+    std::map<uint32_t, std::vector<MoveUserReqHeader>> _moveReqBuffer;
 
     // Timers
 
@@ -322,6 +328,8 @@ private:
 
     void handlePubKeyResp(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
 
+    void handleMoveUserReq(const BaseHeader &base, const uint8_t *payload, size_t payloadLen);
+
     // SEND PACKET HELPER FUNCTIONS
 
     /**
@@ -380,6 +388,9 @@ private:
 
     // DATA QUEUE HELPER FUNCTIONS
     void flushDataQueue(uint32_t destNodeID);
+
+    // MoveReq Buffer
+    void flushMoveReqBuffer(uint32_t destNodeID);
 
     // Seen IDs SET HELPER FUNCTIONS
     bool isDuplicatePacketID(uint32_t packetID);
@@ -508,6 +519,23 @@ private:
         auto msgs = std::move(it->second);
         _userRouteBuffer.erase(it);
         return msgs;
+    }
+
+    inline void addMoveReq(uint32_t nodeID,
+                           const MoveUserReqHeader &h)
+    {
+        Lock lock(_mutex);
+        _moveReqBuffer[nodeID].push_back(h);
+    }
+    inline std::vector<MoveUserReqHeader> popMoveReq(uint32_t nodeID)
+    {
+        Lock lock(_mutex);
+        auto it = _moveReqBuffer.find(nodeID);
+        if (it == _moveReqBuffer.end())
+            return {};
+        auto v = std::move(it->second);
+        _moveReqBuffer.erase(it);
+        return v;
     }
 
 #ifdef UNIT_TEST

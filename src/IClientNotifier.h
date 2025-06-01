@@ -14,7 +14,8 @@ enum class BleType : uint8_t
     BLE_GATEWAY_STATUS,
     BLE_ACK,
     BLE_PUBKEY_RESP,
-    BLE_ENC_UnicastUser
+    BLE_ENC_UnicastUser,
+    BLE_NODE_ID
 };
 
 struct Outgoing

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef MOCK_RADIO_MANAGER
+#define MOCK_RADIO_MANAGER
 
 #include "IRadioManager.h"
 #include <queue>
@@ -52,4 +53,4 @@ public:
 private:
     std::queue<RadioPacket> rxQueue;
 };
-
+#endif

@@ -35,7 +35,8 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
         _diffAdded.insert(userID);
     }
     writeUnlock();
-    if(_mqttManager != nullptr) {
+    if (_mqttManager != nullptr)
+    {
         _mqttManager->publishUserAdded(userID);
     }
     Serial.printf("Added new user %u\n", userID);
@@ -118,7 +119,6 @@ std::vector<uint32_t> UserSessionManager::getConnectedUsers()
     }
     readUnlock();
     return list;
-
 }
 
 void UserSessionManager::getAndClearDiff(std::vector<uint32_t> &added,
@@ -133,4 +133,38 @@ void UserSessionManager::getAndClearDiff(std::vector<uint32_t> &added,
     _diffAdded.clear();
     _diffRemoved.clear();
     writeUnlock();
+}
+
+void UserSessionManager::queueOffline(uint32_t userID,
+                                      const OfflineMsg &m)
+{
+    writeLock();
+    auto it = _users.find(userID);
+    if (it == _users.end())
+    {
+        /* user completely unknown – create a stub entry */
+        _users.emplace(userID,
+                       UserInfo{userID, INVALID_HANDLE, false, millis(), {}});
+        it = _users.find(userID);
+    }
+    auto &box = it->second.inbox;
+    if (box.size() == 10) // keep only the 10 newest
+        box.pop_front();
+    box.push_back(m);
+    writeUnlock();
+}
+
+bool UserSessionManager::popInbox(uint32_t userID, std::vector<OfflineMsg> &out)
+{
+    writeLock();
+    auto it = _users.find(userID);
+    if (it == _users.end() || it->second.inbox.empty())
+    {
+        writeUnlock();
+        return false;
+    }
+    out.assign(it->second.inbox.begin(), it->second.inbox.end());
+    it->second.inbox.clear();
+    writeUnlock();
+    return true;
 }
