@@ -1056,7 +1056,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     {
         if (_gwMgr && _gwMgr->isOnline()) // forward to GatewayManager
             _gwMgr->uplink(umh.fromUserID, umh.toUserID,
-                           (const char *)message);
+                           message, messageLen);
         return; // stop normal routing
     }
 
