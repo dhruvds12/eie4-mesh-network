@@ -132,7 +132,7 @@ public:
 
     void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
 
-    void sendPubKeyReq(uint32_t targetUserID);
+    void sendPubKeyReq(uint32_t targetUserID, uint32_t senderUserID);
 
     void sendMoveUserReq(uint32_t userID, uint32_t oldNodeID);
 

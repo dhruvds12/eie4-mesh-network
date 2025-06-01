@@ -119,7 +119,8 @@ void NetworkMessageHandler::processQueue()
             else if (msg.kind == MsgKind::REQ_PUB_KEY)
             {
 
-                _router->sendPubKeyReq(msg.destID);
+
+                _router->sendPubKeyReq(msg.destID, msg.userID);
             }
             else if (msg.kind == MsgKind::ENC_USER)
             {

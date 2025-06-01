@@ -156,7 +156,9 @@ struct UserMsgHeader
 
 struct PubKeyReq
 {
-    uint32_t userID; // target userID
+    uint32_t senderUserID;
+    uint32_t targetUserID; // target userID
+    uint8_t publicKey[32]; // senders public key
 };
 
 struct PubKeyResp
@@ -168,7 +170,7 @@ struct PubKeyResp
 struct MoveUserReqHeader
 {
     uint32_t userID;
-    uint32_t destNodeID; 
+    uint32_t destNodeID;
 };
 
 // TODO: ESP32-S3 uses little endian currently rely on this for packing and unpacking.
@@ -472,13 +474,23 @@ inline size_t deserialiseUserMsgHeader(const uint8_t *buffer, UserMsgHeader &hea
 // ──────────────────────────────────────────────────────────────────────────────
 inline size_t serialisePubKeyReq(const PubKeyReq &h, uint8_t *buf, size_t off)
 {
-    memcpy(buf + off, &h.userID, 4);
-    return off + 4;
+    memcpy(buf + off, &h.senderUserID, 4);
+    off += 4;
+    memcpy(buf + off, &h.targetUserID, 4);
+    off += 4;
+    memcpy(buf + off, h.publicKey, 32);
+    off += 32;
+    return off;
 }
 inline size_t deserialisePubKeyReq(const uint8_t *buf, PubKeyReq &h, size_t off)
 {
-    memcpy(&h.userID, buf + off, 4);
-    return off + 4;
+    memcpy(&h.senderUserID, buf + off, 4);
+    off += 4;
+    memcpy(&h.targetUserID, buf + off, 4);
+    off += 4;
+    memcpy(h.publicKey, buf + off, 32);
+    off += 32;
+    return off;
 }
 
 inline size_t serialisePubKeyResp(const PubKeyResp &h, uint8_t *buf, size_t off)

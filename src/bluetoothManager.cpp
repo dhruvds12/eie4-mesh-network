@@ -519,9 +519,14 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BLE_REQUEST_PUBKEY:
     {
+        if (sender == 0)
+        {
+            Serial.println("ERROR: Sender equals 0 in BLE_REQUEST_PUBKEY breaking -- no PUBKEY REQUEST");
+            break;
+        }
         uint32_t target = dest; /* caller put userID in dest field   */
         Serial.printf("Requested user public key for user: %u\n", target);
-        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size());
+        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
         /* remember who asked so we know which connection to answer on */
         // _userMgr->rememberKeyWaiter(target, connHandle);
         break;

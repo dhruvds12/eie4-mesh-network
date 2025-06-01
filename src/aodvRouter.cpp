@@ -1126,8 +1126,9 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
 
             _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen});
             return;
-        } 
-        else {
+        }
+        else
+        {
             sendUERR(umh.toUserID, _myNodeID, base.originNodeID, base.packetID, base.prevHopID);
             return;
         }
@@ -1301,12 +1302,26 @@ void AODVRouter::handlePubKeyReq(const BaseHeader &base,
     PubKeyReq rq;
     deserialisePubKeyReq(pl, rq, 0);
 
+    // save the key that was send with the request -- saves time in the future
+
+    // WARNING: This will cause an issue, the sender will think the receiver has the public key we cannot
+    //          guarantee that -- how is this going to be tracked we need to handle cases when we don't
+    //          have the public keys present. Hold the message then request the public key.
+    //          NOT IMPLEMENTED
+
     /*  are we the one who knows this key?  */
     const std::array<uint8_t, 32> *pubKey = nullptr;
-    bool hasKey = getPubKey(rq.userID, pubKey);
+    bool hasKey = getPubKey(rq.targetUserID, pubKey);
     if (hasKey)
     { /* yes – send response straight back */
-        sendPubKeyResp(base.prevHopID, rq.userID, base.originNodeID, pubKey->data());
+        // save the incoming public key
+        addPubKey(rq.senderUserID, *reinterpret_cast<const std::array<uint8_t, 32> *>(rq.publicKey));
+        // push the sender users pubkey to all phones preparing for a message on encrypted channel
+        _clientNotifier->notify(
+            Outgoing{BleType::BLE_PUBKEY_RESP,
+                     0, rq.senderUserID,
+                     rq.publicKey, 32});
+        sendPubKeyResp(base.prevHopID, rq.targetUserID, base.originNodeID, pubKey->data());
         return;
     }
 
@@ -1536,21 +1551,45 @@ void AODVRouter::sendACK(uint32_t destNodeID, uint32_t originalPacketID)
     transmitPacket(bh, reinterpret_cast<uint8_t *>(&ah), sizeof(ACKHeader));
 }
 
-void AODVRouter::sendPubKeyReq(uint32_t targetUserID)
+void AODVRouter::sendPubKeyReq(uint32_t targetUserID, uint32_t senderUserID)
 {
     Serial.println("Sending pub key req");
     /*  If we already have the key locally just bail out – the BLE
         side will read from _userKeys.                               */
-    if (hasPubKey(targetUserID))
-        return;
+    const std::array<uint8_t, 32>* targetPk = nullptr;
+    if (getPubKey(targetUserID, targetPk))          // we have it!
+    {
+        // Push it straight to all connected phones so they can cache it.
+        _clientNotifier->notify(
+            Outgoing{BleType::BLE_PUBKEY_RESP,
+                     0,                       // no BLE dest-node (broadcast)
+                     targetUserID,            // “from” = owner of the key
+                     targetPk->data(),
+                     32});
+
+        return;                               // nothing to send over LoRa
+    }
+
 
     /*  Choose where to send the query:
         – If we know the user’s home-node, unicast there.
         – else broadcast.                                             */
+    /* ----------------------------------------------------------------
+     *   Still missing – prepare a PKT_PUBKEY_REQ for the mesh
+     *   (includes our own public key so the remote side can cache it)
+     * ---------------------------------------------------------------- */
     uint32_t dest = BROADCAST_ADDR; // this is the simplest option right now
     GutEntry ge;
     if (getGutEntry(targetUserID, ge))
         dest = ge.nodeID;
+
+    const std::array<uint8_t, 32> *pkPtr = nullptr;
+    if (!getPubKey(senderUserID, pkPtr))
+    {
+        Serial.printf("Sender ID, %u\n", senderUserID);
+        Serial.println("No sender public key – abort");
+        return;
+    }
 
     BaseHeader bh{};
     bh.destNodeID = dest;
@@ -1561,8 +1600,15 @@ void AODVRouter::sendPubKeyReq(uint32_t targetUserID)
     bh.hopCount = 0;
     bh.flags = 0;
 
-    PubKeyReq rq{targetUserID};
-    transmitPacket(bh, reinterpret_cast<const uint8_t *>(&rq), sizeof(rq));
+    PubKeyReq rq{};
+    rq.senderUserID = senderUserID;
+    rq.targetUserID = targetUserID;
+    memcpy(rq.publicKey, pkPtr->data(), sizeof(rq.publicKey));
+
+    /* ----------- serialise + transmit (avoids struct padding) ------ */
+    uint8_t buf[sizeof(PubKeyReq)];
+    size_t n = serialisePubKeyReq(rq, buf, 0);
+    transmitPacket(bh, buf, n);
 }
 
 void AODVRouter::sendPubKeyResp(uint32_t destNodeID, uint32_t targetUserID, uint32_t originNodeID, const uint8_t pk[32])
@@ -1775,7 +1821,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
     if (_mqttManager && _mqttManager->connected)
         // TODO: verify is this encrypted
         _mqttManager->publishPacket(hdrOut.packetID, buffer, offset);
-        
+
     if (!_radioManager->enqueueTxPacket(buffer, offset))
     {
         Serial.println("[AODV] enqueueTxPacket failed");
