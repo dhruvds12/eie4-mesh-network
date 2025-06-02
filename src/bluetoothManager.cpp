@@ -151,7 +151,8 @@ void BluetoothManager::bleTxWorker(void *pv)
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
             case BleType::BLE_NODE_ID:
-                raw = encodeMessage(NODE_ID, 0, pkt->from, pkt->data);
+                Serial.printf("Sending BLE_NODE_ID: to %u, from %u\n", pkt->to, pkt->from);
+                raw = encodeMessage(NODE_ID, pkt->to, pkt->from, {});
                 mgr->sendBroadcast(raw);
                 break;
 
@@ -505,17 +506,17 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         // _netHandler->cacheMyKey(sender, reinterpret_cast<const uint8_t *>(body.data()));
         _userMgr->addOrRefresh(sender, connHandle);
 
-        if (_gatewayOnline)
-        {
-            Serial.print("Sent Gateway available\n");
-            auto pkt = new BleOut{
-                BleType::BLE_GATEWAY,
-                connHandle,
-                0,
-                _nodeID,
-                std::vector<uint8_t>{1}};
-            enqueueBleOut(pkt);
-        }
+        // if (_gatewayOnline)
+        // {
+        //     Serial.print("Sent Gateway available\n");
+        //     auto pkt = new BleOut{
+        //         BleType::BLE_GATEWAY,
+        //         connHandle,
+        //         0,
+        //         _nodeID,
+        //         std::vector<uint8_t>{1}};
+        //     enqueueBleOut(pkt);
+        // }
 
         // Pop any messages in the users inbox
         std::vector<OfflineMsg> queued;
@@ -533,14 +534,13 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             }
         }
 
-        // {
-        //     std::vector<uint8_t> pl;
-        //     for (int b = 0; b < 4; ++b)
-        //         pl.push_back((_nodeID >> (8 * b)) & 0xFF);
-        //     auto pkt = new BleOut{BleType::BLE_NODE_ID, // reuse generic type
-        //                           connHandle, 0, _nodeID, std::move(pl)};
-        //     enqueueBleOut(pkt);
-        // }
+        // std::vector<uint8_t> pl;
+        // for (int b = 0; b < 4; ++b)
+        //     pl.push_back((_nodeID >> (8 * b)) & 0xFF);
+        Serial.printf("Sending Node ID: %u\n", _nodeID);
+        auto pkt = new BleOut{BleType::BLE_NODE_ID, // reuse generic type
+                              connHandle, 0, _nodeID};
+        enqueueBleOut(pkt);
 
         break;
     }
@@ -588,16 +588,46 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         break;
     }
 
+    case REQUEST_NODE_ID:
+    {
+        // The phone is explicitly asking “What is your nodeID right now?”
+        // dest and sender fields are undefined for REQUEST_NODE_ID (we only sent one byte),
+        // but we only care about “connHandle” so we can send back on that same connection:
+
+        Serial.println("Received REQUEST_NODE_ID from phone → replying with NODE_ID");
+        // Build payload: payload = four‐byte little‐endian of this->_nodeID
+        std::vector<uint8_t> payload;
+        payload.reserve(4);
+        for (int b = 0; b < 4; ++b)
+        {
+            payload.push_back((uint8_t)((_nodeID >> (8 * b)) & 0xFF));
+        }
+        // Send as a unicast (so only that phone sees it), using BleType::BLE_NODE_ID.
+        // Because encodeMessage(NODE_ID, to, from, payload) expects (type, dest, from, payload),
+        // and “dest” is the phone’s “userID” or “nodeID”? Actually for NODE_ID we treat “dest” = 0
+        // (unused), and “from” = this->_nodeID. Then the 4‐byte payload holds the nodeID again.
+        std::string raw = encodeMessage(
+            NODE_ID,
+            0,       // dest = 0 (always)
+            _nodeID, // “from” = this node’s ID
+            payload  // four‐byte LE nodeID
+        );
+        sendToClient(connHandle, raw);
+        break;
+    }
+
     case USER_MOVED:
     {
         /* dest   = oldNodeID (where the inbox lives)
            sender = userID                                        */
+        Serial.println("user moved");
         uint32_t oldNodeID = dest;
         uint32_t movedUser = sender;
 
         _netHandler->enqueueMessage(MsgKind::MOVE_USER_REQ,
                                     oldNodeID,
                                     {}, // do not need this
+                                    0,
                                     movedUser);
         break;
     }
