@@ -1064,6 +1064,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     {
         if (_usm && _usm->knowsUser(umh.toUserID))
         {
+            Serial.printf("Knows user: %u", umh.toUserID);
             if (base.flags == FROM_GATEWAY)
             {
                 Serial.println("[AODVRouter] Received gateway user message");

@@ -23,12 +23,14 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
     auto it = _users.find(userID);
     if (it != _users.end())
     {
+        Serial.printf("Welcome back %u\n", userID);
         it->second.bleConnHandle = bleHandle;
         it->second.isConnected = true;
         it->second.lastSeen = now;
     }
     else
     {
+        Serial.printf("Added new user %u\n", userID);
         UserInfo info{userID, bleHandle, true, now};
         _users.emplace(userID, info);
         _diffRemoved.erase(userID);
@@ -39,7 +41,6 @@ void UserSessionManager::addOrRefresh(uint32_t userID, uint16_t bleHandle)
     {
         _mqttManager->publishUserAdded(userID);
     }
-    Serial.printf("Added new user %u\n", userID);
 }
 
 void UserSessionManager::remove(uint32_t userID)
@@ -54,6 +55,7 @@ void UserSessionManager::remove(uint32_t userID)
 
 void UserSessionManager::handleBleDisconnect(uint16_t bleHandle)
 {
+    Serial.println("Disconnecting client registered with session manager");
     writeLock();
     unsigned long now = millis();
     for (auto &kv : _users)
@@ -167,4 +169,18 @@ bool UserSessionManager::popInbox(uint32_t userID, std::vector<OfflineMsg> &out)
     it->second.inbox.clear();
     writeUnlock();
     return true;
+}
+
+void UserSessionManager::setOffline(uint32_t userID)
+{
+    writeLock();
+    _users[userID].isConnected = false;
+    writeUnlock();
+}
+
+void UserSessionManager::setOnline(uint32_t userID)
+{
+    writeLock();
+    _users[userID].isConnected = true;
+    writeUnlock();
 }
