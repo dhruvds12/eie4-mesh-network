@@ -491,6 +491,9 @@ void RadioManager::txTask(void *pvParameteres)
             vTaskDelay(pdMS_TO_TICKS(rnd));
         }
 
+        // The radio needs some time to swap to transmit otherwise the packet gets lost
+        vTaskDelay(pdMS_TO_TICKS(2)); 
+
         //  Channel is free AND no TX in flight → kick off our new send.
         manager->_isTransmitting = true;
         int status = manager->_radio->startTransmit(packet->data, packet->len);
