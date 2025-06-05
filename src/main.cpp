@@ -16,6 +16,11 @@
 #include "userSessionManager.h"
 #include "gatewayManager.h"
 
+// TODO can remove thse imports after testing complete:
+
+#include <esp_wifi.h>
+
+
 // Uncomment the following only on one of the nodes to initiate pings
 // #define INITIATING_NODE
 // #define BLUETOOTH
@@ -98,6 +103,10 @@ void setup()
   Serial.println("Scanning for available WiFi networks...");
   wifiPrintNetworks();
   delay(500);
+
+  wifi_ps_type_t cur;
+  esp_wifi_get_ps(&cur);
+  Serial.printf("Current WiFi PS mode: %d\n", (int)cur);
 
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
