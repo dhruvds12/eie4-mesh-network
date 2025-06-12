@@ -1,6 +1,8 @@
 #include "AODVRouter.h"
 #include <Arduino.h>
 #include <gatewayManager.h>
+#include "DisplayManager.h"
+extern DisplayManager displayManager;
 
 static const uint8_t MAX_HOPS = 5; // TODO: need to adjusted
 
@@ -914,6 +916,12 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen});
+        {
+            char buf[32] = {0}; // always NUL-term
+            size_t n = (actualDataLen > 31) ? 31 : actualDataLen;
+            memcpy(buf, actualData, n);       // copy only payload
+            displayManager.post(String(buf)); // safe
+        }
         fwd.destNodeID = BROADCAST_ADDR;
     }
     else
@@ -1557,20 +1565,19 @@ void AODVRouter::sendPubKeyReq(uint32_t targetUserID, uint32_t senderUserID)
     Serial.println("Sending pub key req");
     /*  If we already have the key locally just bail out – the BLE
         side will read from _userKeys.                               */
-    const std::array<uint8_t, 32>* targetPk = nullptr;
-    if (getPubKey(targetUserID, targetPk))          // we have it!
+    const std::array<uint8_t, 32> *targetPk = nullptr;
+    if (getPubKey(targetUserID, targetPk)) // we have it!
     {
         // Push it straight to all connected phones so they can cache it.
         _clientNotifier->notify(
             Outgoing{BleType::BLE_PUBKEY_RESP,
-                     0,                       // no BLE dest-node (broadcast)
-                     targetUserID,            // “from” = owner of the key
+                     0,            // no BLE dest-node (broadcast)
+                     targetUserID, // “from” = owner of the key
                      targetPk->data(),
                      32});
 
-        return;                               // nothing to send over LoRa
+        return; // nothing to send over LoRa
     }
-
 
     /*  Choose where to send the query:
         – If we know the user’s home-node, unicast there.

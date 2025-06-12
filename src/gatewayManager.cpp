@@ -35,15 +35,16 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst,
     UplinkMsg m{};
 
     /* random 12-char msgId */
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 12; ++i)
+    {
         uint8_t v = esp_random() % 36;
-        m.id[i]   = (v < 10) ? ('0' + v) : ('a' + v - 10);
+        m.id[i] = (v < 10) ? ('0' + v) : ('a' + v - 10);
     }
     m.id[12] = '\0';
 
     m.from = src;
-    m.to   = dst;
-    m.len  = (len > sizeof(m.body)) ? sizeof(m.body) : len;
+    m.to = dst;
+    m.len = (len > sizeof(m.body)) ? sizeof(m.body) : len;
     memcpy(m.body, data, m.len);
 
     /* make sure body is NUL-terminated so String() stops cleanly */
@@ -52,9 +53,8 @@ void GatewayManager::uplink(uint32_t src, uint32_t dst,
     else
         m.body[sizeof(m.body) - 1] = '\0';
 
-    xQueueSend(_txQ, &m, 0);   
+    xQueueSend(_txQ, &m, 0);
 }
-
 
 bool GatewayManager::isOnline() const
 {
@@ -110,8 +110,8 @@ void GatewayManager::syncTask(void *pv)
 
         /* Do ONE “/syncNode” round-trip.  If it returns false
         (HTTP error / JSON parse fail) wait 2 s and retry.         */
-        if (!self->oneSync())
-            Serial.println("oneSync() failed; retrying in 2 s");
+        // if (!self->oneSync())
+        //     Serial.println("oneSync() failed; retrying in 2 s");
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
@@ -202,7 +202,7 @@ bool GatewayManager::oneSync()
     for (JsonObject j : resp["down"].as<JsonArray>())
     {
         const char *txt = j["body"] | "";
-        size_t txtLen   = strlen(txt);  
+        size_t txtLen = strlen(txt);
         uint32_t src = strtoul(j["src"], nullptr, 10);
         uint32_t dst = strtoul(j["dst"], nullptr, 10);
 
@@ -233,7 +233,7 @@ bool GatewayManager::oneSync()
             Serial.printf("Received gatewat message for user %u\n", dst);
             _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
                                  dst,
-                                 (const uint8_t*)txt, txtLen,
+                                 (const uint8_t *)txt, txtLen,
                                  src,
                                  FROM_GATEWAY);
         }
@@ -287,4 +287,75 @@ bool GatewayManager::registerNode()
         Serial.printf("failed (%d)\n", rc);
         return false;
     }
+}
+
+void GatewayManager::broadcastUtc()
+{
+    if (!isOnline())
+        return; // Wi-Fi & registered?
+
+    /* ---- throttle attempts ---- */
+    const uint32_t ATTEMPT_PAUSE = 5000; // 10 s cadence
+    uint32_t nowMs = millis();
+    if (nowMs - _lastAttempt < ATTEMPT_PAUSE)
+        return;
+    _lastAttempt = nowMs;
+
+    /* ---- try to get fresh UTC ---- */
+    uint64_t utcMs;
+    bool ok = fetchUtc(utcMs);
+
+    if (ok)
+    {
+        _utcBaseMs = utcMs;
+        _millisBase = nowMs;
+        _haveUtc = true;
+    }
+    else if (_haveUtc)
+    {
+        /* estimate: add elapsed millis to the last known base */
+        uint32_t delta = nowMs - _millisBase;
+        utcMs = _utcBaseMs + delta;
+        // keep _utcBaseMs/_millisBase unchanged – they anchor drift
+    }
+    else
+    {
+        Serial.println("[GW] UTC fetch failed (no baseline yet)");
+        return; // nothing to send
+    }
+
+    /* ---- wrap and broadcast ---- */
+    char payload[32];
+    snprintf(payload, sizeof(payload),
+             "UTC:%llu",
+             (unsigned long long)(utcMs / 1000ULL)); // keep it compact
+
+    _router->sendData(BROADCAST_ADDR,
+                      reinterpret_cast<uint8_t *>(payload),
+                      strlen(payload));
+}
+
+bool GatewayManager::fetchUtc(uint64_t &utcMs)
+{
+    HTTPClient http;
+    http.setTimeout(8000);
+    http.begin("http://worldtimeapi.org/api/timezone/Etc/UTC");
+    int rc = http.GET();
+    if (rc != 200)
+    {
+        http.end();
+        return false;
+    }
+
+    JsonDocument doc;
+    if (deserializeJson(doc, http.getStream()))
+    {
+        http.end();
+        return false;
+    }
+    http.end();
+
+    uint32_t sec = doc["unixtime"] | 0;
+    utcMs = (uint64_t)sec * 1000ULL; // ms since Epoch
+    return true;
 }
