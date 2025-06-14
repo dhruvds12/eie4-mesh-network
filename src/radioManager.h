@@ -57,6 +57,8 @@ private:
     // Radio IRQ semaphore
     static SemaphoreHandle_t _irqSemaphore;
 
+    static SemaphoreHandle_t _txDoneSemaphore;
+
     // Task handle for the radio task
     TaskHandle_t _radioTaskHandle;
 

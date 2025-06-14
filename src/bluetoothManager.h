@@ -139,7 +139,8 @@ private:
         BLE_PUBKEY_RESP = 0x0F,
         ENC_USER_MSG = 0x11,
         USER_MOVED = 0x12, // phone → node 
-        NODE_ID = 0x13     // node  → phone 
+        NODE_ID = 0x13,     // node  → phone 
+        REQUEST_NODE_ID   = 0x14,
 
     };
 

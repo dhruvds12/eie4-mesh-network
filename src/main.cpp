@@ -16,8 +16,12 @@
 #include "userSessionManager.h"
 #include "gatewayManager.h"
 
+// TODO can remove thse imports after testing complete:
+
+#include <esp_wifi.h>
+
 // Uncomment the following only on one of the nodes to initiate pings
-// #define INITIATING_NODE
+#define INITIATING_NODE
 // #define BLUETOOTH
 
 #include "BluetoothManager.h"
@@ -93,11 +97,17 @@ void setup()
   // Initialise display if needed
   displayManager.initialise();
   delay(100);
+  displayManager.post("Started Correctly, HI");
 
   // First, scan and print available WiFi networks.
   Serial.println("Scanning for available WiFi networks...");
   wifiPrintNetworks();
   delay(500);
+
+  wifi_ps_type_t cur;
+  esp_wifi_get_ps(&cur);
+  Serial.printf("Current WiFi PS mode: %d\n", (int)cur);
+  // esp_wifi_set_ps(WIFI_PS_NONE);   // drop to full-power STA
 
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
@@ -149,36 +159,40 @@ void setup()
     }
   }
 
-#if defined(INITIATING_NODE)
-  const char initMsg[] = "PING";
-  radioManager.enqueueTxPacket((const uint8_t *)initMsg, sizeof(initMsg) - 1);
-#else
-  Serial.println("Listening");
-#endif
+  // #if defined(INITIATING_NODE)
+  //   const char initMsg[] = "PING";
+  //   radioManager.enqueueTxPacket((const uint8_t *)initMsg, sizeof(initMsg) - 1);
+  // #else
+  //   Serial.println("Listening");
+  // #endif
 }
 
 // --- Main Loop ---
 void loop()
 {
 
-  // delay(10000);
-  // // Example: print the number of connected clients.
-  // uint8_t n = btManager->getServer()->getConnectedCount();
-  // Serial.printf("Connected count: %u\n", n);
+// delay(10000);
+// // Example: print the number of connected clients.
+// uint8_t n = btManager->getServer()->getConnectedCount();
+// Serial.printf("Connected count: %u\n", n);
 
-  // if (n)
-  // {
-  //   std::string message = "bye";
-  //   bool ok = btManager->sendBroadcast(message);
-  //   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
-  // }
+// if (n)
+// {
+//   std::string message = "bye";
+//   bool ok = btManager->sendBroadcast(message);
+//   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+// }
 
-  // static unsigned long lastPublishTime = 0;
-  // if (millis() - lastPublishTime > 5000)
-  // {
-  //   lastPublishTime = millis();
-  //   mqttManager->publishMessage("hardware/to/simulation", "Hardware Status: Idle");
-  //   Serial.println("Published hardware status");
-  // }
-  // delay(100);
+// static unsigned long lastPublishTime = 0;
+// if (millis() - lastPublishTime > 5000)
+// {
+//   lastPublishTime = millis();
+//   mqttManager->publishMessage("hardware/to/simulation", "Hardware Status: Idle");
+//   Serial.println("Published hardware status");
+// }
+// delay(100);
+#ifdef INITIATING_NODE   // only the STA node that has Wi-Fi
+  gwMgr->broadcastUtc(); // now fetches + sends in one call
+#endif
+  delay(5000);
 }

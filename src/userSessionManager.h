@@ -97,6 +97,10 @@ public:
      */
     bool popInbox(uint32_t userID, std::vector<OfflineMsg> &out);
 
+    void setOffline(uint32_t userID);
+
+    void setOnline(uint32_t userID);
+
 private:
     // Reader-writer lock implementation
     mutable SemaphoreHandle_t _readCountMutex;

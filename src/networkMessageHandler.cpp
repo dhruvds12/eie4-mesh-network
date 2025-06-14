@@ -134,7 +134,8 @@ void NetworkMessageHandler::processQueue()
             else if (msg.kind == MsgKind::MOVE_USER_REQ)
             {
                 /* userID   = moved user
-                   destID   = old nodeID                                 */
+                   destID   = old nodeID    */
+                Serial.println("Sending user moved request....");
                 _router->sendMoveUserReq(msg.userID, msg.destID);
             }
         }

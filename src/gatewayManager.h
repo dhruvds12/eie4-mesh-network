@@ -32,6 +32,8 @@ public:
 
     bool isOnline() const;
 
+    void broadcastUtc();   
+
 private:
     struct UplinkMsg
     {
@@ -66,6 +68,14 @@ private:
     BluetoothManager *_btMgr;
     AODVRouter *_router;
     bool _registered = false;
+
+    bool fetchUtc(uint64_t &utcMs);
+    uint32_t _lastUtcFetch = 0;  
+    
+    uint64_t _utcBaseMs   = 0;          // last successful UTC (ms)
+    uint32_t _millisBase  = 0;          // millis() when that happened
+    bool     _haveUtc     = false;      // have we ever fetched once?
+    uint32_t _lastAttempt = 0;          // throttle HTTP queries
 };
 
 #endif
