@@ -801,6 +801,7 @@ void AODVRouter::handleRREP(const BaseHeader &base, const uint8_t *payload, size
         Serial.printf("Flushing data queue for ID: %d", rrep.RREPDestNodeID);
         flushDataQueue(rrep.RREPDestNodeID);
         flushMoveReqBuffer(rrep.RREPDestNodeID);
+        flushUserRouteBuffer(rrep.RREPDestNodeID);
     }
 
     // If I initially sent the RREQ no need to continue forwarding
@@ -1232,11 +1233,21 @@ void AODVRouter::handleUREP(const BaseHeader &base, const uint8_t *payload, size
 
     if (_myNodeID == base.originNodeID)
     {
-        if (hasBufferedUserMessages(urep.userID))
-        {
-            flushUserRouteBuffer(urep.userID);
-        }
+        // if (hasBufferedUserMessages(urep.userID))
+        // {
+        //     // flushUserRouteBuffer(urep.userID);
+        // }
 
+        auto pending = popBufferedUserMessages(urep.userID);
+        for (auto &msg : pending)
+        {
+            sendUserMessage(msg.senderID,
+                            urep.userID,
+                            msg.message,
+                            msg.length,
+                            msg.packetID); // keeps original pktId
+            vPortFree(msg.message);
+        }
         return;
     }
 
