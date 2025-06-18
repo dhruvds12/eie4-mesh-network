@@ -89,13 +89,13 @@ void BluetoothManager::bleTxWorker(void *pv)
             switch (pkt->type)
             {
             case BleType::BLE_UnicastUser:
-                Serial.printf("Received user_msg from %u, to %u\n", pkt->from, pkt->to);
-                raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data);
+                Serial.printf("Received user_msg from %u, to %u\n", pkt->from, pkt->to, pkt->pktId);
+                raw = encodeMessage(USER_MSG, pkt->to, pkt->from, pkt->data, pkt->pktId);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
             case BleType::BLE_USER_GATEWAY:
-                Serial.printf("Received Gateway msg from %u, to %u\n", pkt->from, pkt->to);
-                raw = encodeMessage(USER_MSG_GATEWAY, pkt->to, pkt->from, pkt->data);
+                Serial.printf("Received Gateway msg from %u, to %u\n", pkt->from, pkt->to, pkt->pktId);
+                raw = encodeMessage(USER_MSG_GATEWAY, pkt->to, pkt->from, pkt->data, pkt->pktId);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
             case BleType::BLE_GATEWAY:
@@ -111,11 +111,11 @@ void BluetoothManager::bleTxWorker(void *pv)
                 break;
             }
             case BleType::BLE_Node:
-                raw = encodeMessage(NODE_MSG, pkt->to, pkt->from, pkt->data);
+                raw = encodeMessage(NODE_MSG, pkt->to, pkt->from, pkt->data, pkt->pktId);
                 mgr->sendBroadcast(raw);
                 break;
             case BleType::BLE_Broadcast:
-                raw = encodeMessage(BROADCAST, pkt->to, pkt->from, pkt->data);
+                raw = encodeMessage(BROADCAST, pkt->to, pkt->from, pkt->data, pkt->pktId);
                 mgr->sendBroadcast(raw);
                 break;
             case BleType::BLE_List_Users:
@@ -146,8 +146,8 @@ void BluetoothManager::bleTxWorker(void *pv)
                 break;
             }
             case BleType::BLE_ENC_UnicastUser:
-                Serial.printf("Received encrypted user_msg from %u, to %u\n", pkt->from, pkt->to);
-                raw = encodeMessage(ENC_USER_MSG, pkt->to, pkt->from, pkt->data);
+                Serial.printf("Received encrypted user_msg from %u, to %u\n", pkt->from, pkt->to, pkt->pktId);
+                raw = encodeMessage(ENC_USER_MSG, pkt->to, pkt->from, pkt->data, pkt->pktId);
                 mgr->sendToClient(pkt->connHandle, raw);
                 break;
             case BleType::BLE_NODE_ID:
@@ -417,7 +417,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     {
         // destA = target nodeID
         Serial.printf("Node_msg for %u from %u\n", dest, sender);
-        _netHandler->enqueueMessage(MsgKind::NODE, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size());
+        _netHandler->enqueueMessage(MsgKind::NODE, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId);
 
         // Need to send the message back to the node as well for other users connected to see
         // TODO: this means that sender will get the message back. --> either phone needs to discard or we never send it to the phone
@@ -427,7 +427,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             sender, // swapped so that the phone accepts the message correctly
             dest,   // swapped so that the phone accepts the message correctly
-            std::move(payload)};
+            std::move(payload),
+            pktId};
         enqueueBleOut(pkt);
         break;
     }
@@ -438,7 +439,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
+            _netHandler->enqueueMessage(MsgKind::USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId, sender);
 
             if (pktId)
             {
@@ -466,7 +467,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BROADCAST:
     {
-        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size());
+        _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId);
 
         // should send messages back to users that are connected to this node:
 
@@ -476,7 +477,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             0,
             sender, // swapped so that the phone accepts the message correctly --> not really required for broadcast
             dest,   // swapped so that the phone accepts the message correctly --> not really required for broadcast
-            std::move(payload)};
+            std::move(payload),
+            pktId};
         enqueueBleOut(pkt);
         break;
     }
@@ -563,7 +565,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case ENC_USER_MSG:
     {
         Serial.println("Received an encrypted message");
-        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, ENC_MSG);
+        _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId, sender, ENC_MSG);
 
         if (pktId)
         {
@@ -627,6 +629,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         _netHandler->enqueueMessage(MsgKind::MOVE_USER_REQ,
                                     oldNodeID,
                                     {}, // do not need this
+                                    0,
                                     0,
                                     movedUser);
         break;

@@ -45,12 +45,14 @@ struct RouteEntry
 
 struct dataBufferEntry
 {
+    uint32_t packetID;
     uint8_t *data;
     size_t length;
 };
 
 struct userMessageBufferEntry
 {
+    uint32_t packetID;
     uint32_t senderID;
     uint8_t *message;
     size_t length;
@@ -58,6 +60,7 @@ struct userMessageBufferEntry
 
 struct PendingUserRouteEntry
 {
+    uint32_t packetID;
     uint32_t senderID;   // who sent the message
     uint32_t destUserID; // ultimate recipient user
     uint8_t *message;    // payload pointer
@@ -128,9 +131,9 @@ public:
      * @param len The length of the raw data
      */
 
-    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint8_t flags = 0);
+    void sendData(uint32_t destNodeID, const uint8_t *data, size_t len, uint32_t packetId, uint8_t flags = 0);
 
-    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint8_t flags = 0);
+    void sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const uint8_t *data, size_t len, uint32_t packetId, uint8_t flags = 0);
 
     void sendPubKeyReq(uint32_t targetUserID, uint32_t senderUserID);
 
@@ -195,6 +198,7 @@ private:
     // Map for entries await UREP
     std::map<uint32_t, std::vector<userMessageBufferEntry>> _userMsgBuffer;
 
+    // Map for entries await RREP
     std::map<uint32_t, std::vector<PendingUserRouteEntry>> _userRouteBuffer;
 
     // Set to store seen message ids
@@ -407,7 +411,7 @@ private:
 
     bool findAckPacket(uint32_t packetID);
 
-    void insertDataBuffer(uint32_t destNodeID, uint8_t *data, size_t len);
+    void insertDataBuffer(uint32_t destNodeID, uint8_t *data, size_t len, uint32_t packetID);
 
     bool ackBufferHasPacketID(uint32_t packetID);
 
