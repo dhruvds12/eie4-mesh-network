@@ -234,6 +234,7 @@ bool GatewayManager::oneSync()
             _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
                                  dst,
                                  (const uint8_t *)txt, txtLen,
+                                 0,
                                  src,
                                  FROM_GATEWAY);
         }
@@ -332,7 +333,7 @@ void GatewayManager::broadcastUtc()
 
     _router->sendData(BROADCAST_ADDR,
                       reinterpret_cast<uint8_t *>(payload),
-                      strlen(payload));
+                      strlen(payload), 0);
 }
 
 bool GatewayManager::fetchUtc(uint64_t &utcMs)

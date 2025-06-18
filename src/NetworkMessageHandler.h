@@ -23,7 +23,7 @@ enum class MsgKind : uint8_t
 
 struct OutgoingMessage
 {
-    uint8_t packetId;
+    uint32_t packetId;
     MsgKind kind;
     uint8_t flags;   // still carries FROM_GATEWAY / TO_GATEWAY bits
     uint32_t destID; // node-ID *or* user-ID (see kind)

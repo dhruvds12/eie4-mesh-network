@@ -21,7 +21,7 @@
 #include <esp_wifi.h>
 
 // Uncomment the following only on one of the nodes to initiate pings
-#define INITIATING_NODE
+// #define INITIATING_NODE
 // #define BLUETOOTH
 
 #include "BluetoothManager.h"
@@ -191,8 +191,8 @@ void loop()
 //   Serial.println("Published hardware status");
 // }
 // delay(100);
-#ifdef INITIATING_NODE   // only the STA node that has Wi-Fi
-  gwMgr->broadcastUtc(); // now fetches + sends in one call
-#endif
-  delay(5000);
+// #ifdef INITIATING_NODE   // only the STA node that has Wi-Fi
+//   gwMgr->broadcastUtc(); // now fetches + sends in one call
+// #endif
+//   delay(5000);
 }

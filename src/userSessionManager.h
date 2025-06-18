@@ -19,6 +19,7 @@ static const uint16_t INVALID_HANDLE = 0xFFFF;
 struct OfflineMsg
 {
     BleType type;
+    uint32_t packetId;
     uint32_t to;
     uint32_t from;
     std::vector<uint8_t> data;

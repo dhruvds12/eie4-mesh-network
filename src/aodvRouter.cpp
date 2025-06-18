@@ -1099,6 +1099,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     /* cache for later */
                     OfflineMsg om{
                         BleType::BLE_USER_GATEWAY, // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                        base.packetID,
                         umh.toUserID,
                         umh.fromUserID,
                         std::vector<uint8_t>(message, message + messageLen)};
@@ -1120,6 +1121,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     /* cache for later */
                     OfflineMsg om{
                         BleType::BLE_ENC_UnicastUser, // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                        base.packetID,
                         umh.toUserID,
                         umh.fromUserID,
                         std::vector<uint8_t>(message, message + messageLen)};
@@ -1141,6 +1143,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                 /* cache for later */
                 OfflineMsg om{
                     BleType::BLE_UnicastUser, // or BLE_ENC_UnicastUser / BLE_USER_GATEWAY
+                    base.packetID,
                     umh.toUserID,
                     umh.fromUserID,
                     std::vector<uint8_t>(message, message + messageLen)};
@@ -1441,6 +1444,7 @@ void AODVRouter::handleMoveUserReq(const BaseHeader &base, const uint8_t *payloa
                         om.to,
                         om.data.data(),
                         om.data.size(),
+                        om.packetId,
                         (om.type == BleType::BLE_ENC_UnicastUser) ? ENC_MSG : 0);
     }
 

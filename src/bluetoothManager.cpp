@@ -416,7 +416,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     case NODE_MSG:
     {
         // destA = target nodeID
-        Serial.printf("Node_msg for %u from %u\n", dest, sender);
+        Serial.printf("Node_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
         _netHandler->enqueueMessage(MsgKind::NODE, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId);
 
         // Need to send the message back to the node as well for other users connected to see
@@ -435,7 +435,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case USER_MSG:
     {
-        Serial.printf("Received user_msg from %u to %u\n", sender, dest);
+        Serial.printf("Node_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
         if (_userMgr->knowsUser(sender))
         {
 
@@ -467,6 +467,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case BROADCAST:
     {
+        Serial.printf("Node_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
         _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId);
 
         // should send messages back to users that are connected to this node:
@@ -489,7 +490,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         if (_userMgr->knowsUser(sender))
         {
 
-            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender, TO_GATEWAY);
+            _netHandler->enqueueMessage(MsgKind::TO_GATEWAY, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), 0, sender, TO_GATEWAY);
         }
         else
         {
@@ -556,7 +557,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         }
         uint32_t target = dest; /* caller put userID in dest field   */
         Serial.printf("Requested user public key for user: %u\n", target);
-        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size(), sender);
+        _netHandler->enqueueMessage(MsgKind::REQ_PUB_KEY, target, reinterpret_cast<const uint8_t *>(body.data()), body.size(), 0, sender);
         /* remember who asked so we know which connection to answer on */
         // _userMgr->rememberKeyWaiter(target, connHandle);
         break;
