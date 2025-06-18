@@ -143,7 +143,8 @@ private:
         REQUEST_NODE_ID = 0x14,
         USER_MSG_REQ_ACK = 0x15, /* phone → node, ask for ACK, user-to-user  */
         NODE_MSG_REQ_ACK = 0x16, /* phone → node, ask for ACK, node-to-node  */
-        ACK_FAILED = 0x17        /* node  → phone, delivery could not finish */
+        ACK_FAILED = 0x17,        /* node  → phone, delivery could not finish */
+        ENC_USER_MSG_REQ_ACK = 0x18, 
     };
 
     static std::string encodePubKey(uint32_t userID, const uint8_t pk[32])

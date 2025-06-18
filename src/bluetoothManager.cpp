@@ -333,7 +333,7 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                    type == USER_MSG ||
                    type == USER_MSG_GATEWAY ||
                    type == BROADCAST || type == ENC_USER_MSG ||
-                   type == USER_MSG_REQ_ACK || type == NODE_MSG_REQ_ACK);
+                   type == USER_MSG_REQ_ACK || type == NODE_MSG_REQ_ACK || type == ENC_USER_MSG_REQ_ACK);
 
     if (hasPkt)
     {
@@ -686,6 +686,22 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                                     pktId,
                                     0,
                                     REQ_ACK);
+        break;
+    }
+
+    case ENC_USER_MSG_REQ_ACK:
+    {
+        Serial.println("Received ENC_USER_MSG_REQ_ACK");
+
+        _netHandler->enqueueMessage(
+            MsgKind::ENC_USER,
+            dest, // to-node
+            (uint8_t *)body.data(), body.size(),
+            pktId,
+            sender,   // from-user
+            ENC_ACK); // flags
+        /* ACK back to phone will be produced by the router when it
+           sees the mesh-layer ACK (identical to clear-text flow).   */
         break;
     }
 

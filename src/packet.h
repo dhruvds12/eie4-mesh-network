@@ -37,7 +37,8 @@ enum flags : uint8_t
     TO_GATEWAY = 0x02,
     I_AM_GATEWAY = 0x03,
     REQ_ACK = 0x04,
-    ENC_MSG = 0x10
+    ENC_MSG = 0x10,
+    ENC_ACK = 0x14,
 };
 
 static constexpr uint8_t FLAG_ENCRYPTED = 0x80;

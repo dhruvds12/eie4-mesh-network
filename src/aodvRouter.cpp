@@ -499,6 +499,7 @@ void AODVRouter::sendUserMessage(uint32_t fromUserID, uint32_t toUserID, const u
             if (!copy)
                 return; // OOM
             memcpy(copy, message, len);
+            Serial.printf("[AODVRouter] SendUserMessage No GUT entry for %u, sending UREQ.\n", ge.nodeID);
             userMessageBufferEntry buffer;
             buffer.packetID = packetId;
             buffer.senderID = fromUserID;
@@ -1075,8 +1076,9 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     const uint8_t *message = payload + offset;
     size_t messageLen = payloadLen - offset;
 
-    if ((base.flags == REQ_ACK))
+    if (base.flags == REQ_ACK || base.flags == ENC_ACK)
     {
+        Serial.println("Sent ACK");
         // Per-hop explicit ACK to the previous hop
         sendACK(base.prevHopID, base.packetID);
     }
@@ -1116,7 +1118,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                 _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
                 return;
             }
-            if (base.flags == ENC_MSG)
+            if (base.flags == ENC_MSG || base.flags == ENC_ACK)
             {
                 Serial.println("[AODVRouter] Entered I am receiver path ENCRYPTED User Message");
                 // TODO: need to properly extract the data without the header
@@ -1878,13 +1880,14 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
         return;
     }
 
-    if (hdrOut.destNodeID != BROADCAST_ADDR && (hdrOut.flags & REQ_ACK))
+    if (hdrOut.destNodeID != BROADCAST_ADDR && hdrOut.flags & REQ_ACK)
     {
         Serial.println("STORING ACKNOWLEDGED PACKET");
         RouteEntry re;
         // This should probably be changed to actual destination rather than just next hop
-        if (getRoute(hdrOut.destNodeID, re))
+        if (getRoute(hdrOut.destNodeID, re)) {
             storeAckPacket(hdrOut.packetID, buffer, offset, re.nextHop);
+        }
     }
 }
 
@@ -2089,8 +2092,10 @@ void AODVRouter::removeFromACKBuffer(uint32_t packetID)
     {
         Lock l(_mutex);
         auto it = ackBuffer.find(packetID);
-        if (it == ackBuffer.end())
+        if (it == ackBuffer.end()) {
+            Serial.println("Received ack finished early no items found");
             return;
+        }
         ent = it->second; // take a copy
         ackBuffer.erase(it);
     } // ---- mutex released
@@ -2099,11 +2104,15 @@ void AODVRouter::removeFromACKBuffer(uint32_t packetID)
     deserialiseBaseHeader(ent.packet, bh);
     if (bh.originNodeID == _myNodeID) // we started it
     {
+        Serial.println("Received ack I am origin");
         if (bh.packetType == PKT_USER_MSG)
         {
+            Serial.println("Received ack user msg");
             UserMsgHeader uh;
             deserialiseUserMsgHeader(ent.packet + sizeof(BaseHeader),
-                                     uh, 0);
+            uh, 0);
+            Serial.printf("Received ack user msg from ID: %u", uh.fromUserID);
+
             _clientNotifier->notify(
                 Outgoing{BleType::BLE_ACK, /* same op-code as before   */
                          uh.fromUserID, 0,
