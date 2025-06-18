@@ -134,7 +134,10 @@ void BluetoothManager::bleTxWorker(void *pv)
             {
                 Serial.println("Sending ack");
                 raw = mgr->encodeAck(pkt->pktId);
-                mgr->sendToClient(pkt->connHandle, raw);
+                if (pkt->connHandle == 0)
+                    +mgr->sendBroadcast(raw); // broadcast version
+                else
+                    +mgr->sendToClient(pkt->connHandle, raw);
                 break;
             }
             case BleType::BLE_PUBKEY_RESP:
@@ -154,6 +157,14 @@ void BluetoothManager::bleTxWorker(void *pv)
                 Serial.printf("Sending BLE_NODE_ID: to %u, from %u\n", pkt->to, pkt->from);
                 raw = encodeMessage(NODE_ID, pkt->to, pkt->from, {});
                 mgr->sendBroadcast(raw);
+                break;
+            case BleType::BLE_ACK_FAILURE:
+                Serial.println("Sending ACK-failure");
+                raw = encodeAckFailure(pkt->pktId);
+                if (pkt->connHandle == 0)
+                    mgr->sendBroadcast(raw);
+                else
+                    mgr->sendToClient(pkt->connHandle, raw);
                 break;
 
             default:
@@ -241,9 +252,24 @@ bool BluetoothManager::notify(const Outgoing &o)
     // else find the
     if (o.type == BleType::BLE_USER_GATEWAY || o.type == BleType::BLE_UnicastUser || o.type == BleType::BLE_ENC_UnicastUser)
     {
-        pkt = new BleOut{o.type, _userMgr->getBleHandle(o.to), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
+        pkt = new BleOut{o.type, _userMgr->getBleHandle(o.to), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length), o.pktId};
     }
-
+    else if (o.type == BleType::BLE_Broadcast || o.type == BleType::BLE_Node)
+    {
+        pkt = new BleOut{o.type, uint16_t(0), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length), o.pktId};
+    }
+    else if (o.type == BleType::BLE_ACK || o.type == BleType::BLE_ACK_FAILURE)
+    {
+        if (o.to == 0)
+        {
+            pkt = new BleOut{o.type, uint16_t(0), 0, 0, {}, o.pktId};
+        }
+        else
+        {
+            uint16_t h = _userMgr->getBleHandle(o.to);
+            pkt = new BleOut{o.type, h, o.to, 0, {}, o.pktId};
+        }
+    }
     else
     {
         pkt = new BleOut{o.type, uint16_t(0), o.to, o.from, std::vector<uint8_t>(o.data, o.data + o.length)};
@@ -306,7 +332,8 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
     auto hasPkt = (type == NODE_MSG ||
                    type == USER_MSG ||
                    type == USER_MSG_GATEWAY ||
-                   type == BROADCAST || type == ENC_USER_MSG);
+                   type == BROADCAST || type == ENC_USER_MSG ||
+                   type == USER_MSG_REQ_ACK || type == NODE_MSG_REQ_ACK);
 
     if (hasPkt)
     {
@@ -435,39 +462,37 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
 
     case USER_MSG:
     {
-        Serial.printf("Node_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
+        Serial.printf("user_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
         if (_userMgr->knowsUser(sender))
         {
 
             _netHandler->enqueueMessage(MsgKind::USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId, sender);
 
-            if (pktId)
-            {
-                // TODO remove this is just a test
-                if (pktId)
-                { // only if phone supplied one
-                    auto ackPkt = new BleOut{
-                        BleType::BLE_ACK,
-                        connHandle, // back to the same phone
-                        0,
-                        0,    // unused
-                        {},   // no payload
-                        pktId // <-- the 32-bit id
-                    };
-                    enqueueBleOut(ackPkt);
-                }
-            }
-            else
-            {
-                Serial.println("Did not recognise sender");
-            }
+            // if (pktId)
+            // {
+            //     // TODO remove this is just a test
+
+            //     auto ackPkt = new BleOut{
+            //         BleType::BLE_ACK,
+            //         connHandle, // back to the same phone
+            //         0,
+            //         0,    // unused
+            //         {},   // no payload
+            //         pktId // <-- the 32-bit id
+            //     };
+            //     enqueueBleOut(ackPkt);
+            // }
+            // else
+            // {
+            //     Serial.println("Did not recognise sender");
+            // }
         }
         break;
     }
 
     case BROADCAST:
     {
-        Serial.printf("Node_msg for %u from %u, message ID : %u\n", dest, sender, pktId);
+        Serial.printf("Broadcast MSG for %u from %u, message ID : %u\n", dest, sender, pktId);
         _netHandler->enqueueMessage(MsgKind::NODE, BROADCAST_ADDR, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId);
 
         // should send messages back to users that are connected to this node:
@@ -568,26 +593,26 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
         Serial.println("Received an encrypted message");
         _netHandler->enqueueMessage(MsgKind::ENC_USER, dest, reinterpret_cast<const uint8_t *>(body.data()), body.size(), pktId, sender, ENC_MSG);
 
-        if (pktId)
-        {
-            // TODO remove this is just a test
-            if (pktId)
-            { // only if phone supplied one
-                auto ackPkt = new BleOut{
-                    BleType::BLE_ACK,
-                    connHandle, // back to the same phone
-                    0,
-                    0,    // unused
-                    {},   // no payload
-                    pktId // <-- the 32-bit id
-                };
-                enqueueBleOut(ackPkt);
-            }
-        }
-        else
-        {
-            Serial.println("Did not recognise sender");
-        }
+        // if (pktId)
+        // {
+        //     // TODO remove this is just a test
+        //     if (pktId)
+        //     { // only if phone supplied one
+        //         auto ackPkt = new BleOut{
+        //             BleType::BLE_ACK,
+        //             connHandle, // back to the same phone
+        //             0,
+        //             0,    // unused
+        //             {},   // no payload
+        //             pktId // <-- the 32-bit id
+        //         };
+        //         enqueueBleOut(ackPkt);
+        //     }
+        // }
+        // else
+        // {
+        //     Serial.println("Did not recognise sender");
+        // }
         break;
     }
 
@@ -633,6 +658,34 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                                     0,
                                     0,
                                     movedUser);
+        break;
+    }
+
+    case USER_MSG_REQ_ACK:
+    {
+
+        Serial.printf("Received USER_MSG_REQ_ACK from %u to %u, message ID %u\n", sender, dest, pktId);
+        if (_userMgr->knowsUser(sender))
+            _netHandler->enqueueMessage(MsgKind::USER,
+                                        dest,
+                                        (uint8_t *)body.data(),
+                                        body.size(),
+                                        pktId,
+                                        sender,
+                                        REQ_ACK);
+        break;
+    }
+
+    case NODE_MSG_REQ_ACK:
+    {
+        Serial.printf("Received NODE_MSG_REQ_ACK from %u to %u, message ID %u\n", sender, dest, pktId);
+        _netHandler->enqueueMessage(MsgKind::NODE,
+                                    dest,
+                                    (uint8_t *)body.data(),
+                                    body.size(),
+                                    pktId,
+                                    0,
+                                    REQ_ACK);
         break;
     }
 

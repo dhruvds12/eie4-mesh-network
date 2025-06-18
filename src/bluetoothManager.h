@@ -133,15 +133,17 @@ private:
         USER_MSG_GATEWAY = 0x0A,
         GATEWAY_OFFLINE = 0x0B,
         ACK_SUCCESS = 0x0C,
-        USER_MSG_ACCEPTED = 0x10,
         BLE_ANNOUNCE_KEY = 0x0D,
         BLE_REQUEST_PUBKEY = 0x0E,
         BLE_PUBKEY_RESP = 0x0F,
+        USER_MSG_ACCEPTED = 0x10,
         ENC_USER_MSG = 0x11,
-        USER_MOVED = 0x12, // phone → node 
-        NODE_ID = 0x13,     // node  → phone 
-        REQUEST_NODE_ID   = 0x14,
-
+        USER_MOVED = 0x12, // phone → node
+        NODE_ID = 0x13,    // node  → phone
+        REQUEST_NODE_ID = 0x14,
+        USER_MSG_REQ_ACK = 0x15, /* phone → node, ask for ACK, user-to-user  */
+        NODE_MSG_REQ_ACK = 0x16, /* phone → node, ask for ACK, node-to-node  */
+        ACK_FAILED = 0x17        /* node  → phone, delivery could not finish */
     };
 
     static std::string encodePubKey(uint32_t userID, const uint8_t pk[32])
@@ -156,6 +158,17 @@ private:
             s.push_back(0);
         s.append(reinterpret_cast<const char *>(pk), 32);
         return s;
+    }
+
+    /* helper to build the 5-byte “ACK_FAILED” packet */
+    static std::string encodeAckFailure(uint32_t pktId)
+    {
+        std::string p;
+        p.reserve(1 + 4);
+        p.push_back(char(ACK_FAILED));
+        for (int i = 0; i < 4; ++i)
+            p.push_back(char((pktId >> (8 * i)) & 0xFF));
+        return p;
     }
 
     void recordConnection(const NimBLEConnInfo &connInfo);

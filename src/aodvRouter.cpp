@@ -343,6 +343,7 @@ void AODVRouter::cleanupAckBuffer()
             DATAHeader dh;
             deserialiseDATAHeader(ent.packet, dh, sizeof(BaseHeader));
             sendRERR(_myNodeID, bh.originNodeID, dh.finalDestID, pid);
+            _clientNotifier->notify(Outgoing{BleType::BLE_ACK_FAILURE, 0, 0, nullptr, 0, pid});
             break;
         }
         case PKT_USER_MSG:
@@ -350,6 +351,7 @@ void AODVRouter::cleanupAckBuffer()
             UserMsgHeader uh;
             deserialiseUserMsgHeader(ent.packet, uh, sizeof(BaseHeader));
             sendRERR(_myNodeID, bh.originNodeID, uh.toNodeID, pid);
+            _clientNotifier->notify(Outgoing{BleType::BLE_ACK_FAILURE, uh.fromUserID, 0, nullptr, 0, pid});
             break;
         }
 
@@ -660,6 +662,8 @@ void AODVRouter::handlePacket(RadioPacket *rxPacket)
         return;
     }
 
+    Serial.printf("Packet ID: %U\n", bh.packetID);
+
     // Check if prev. seen message, hopCount etc.
 
     size_t offset = sizeof(BaseHeader);
@@ -917,6 +921,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.originNodeID, actualData, actualDataLen, base.packetID});
         return;
     }
@@ -930,6 +935,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
+        Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen, base.packetID});
         {
             char buf[32] = {0}; // always NUL-term
@@ -1069,7 +1075,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
     const uint8_t *message = payload + offset;
     size_t messageLen = payloadLen - offset;
 
-    if (base.flags == REQ_ACK)
+    if ((base.flags == REQ_ACK))
     {
         // Per-hop explicit ACK to the previous hop
         sendACK(base.prevHopID, base.packetID);
@@ -1106,6 +1112,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     _usm->queueOffline(umh.toUserID, om);
                     return; // nothing else to do now
                 }
+                Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
                 _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
                 return;
             }
@@ -1128,6 +1135,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     _usm->queueOffline(umh.toUserID, om);
                     return; // nothing else to do now
                 }
+                Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
                 _clientNotifier->notify(Outgoing{BleType::BLE_ENC_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
                 return;
             }
@@ -1150,7 +1158,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                 _usm->queueOffline(umh.toUserID, om);
                 return; // nothing else to do now
             }
-
+            Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
             _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
             return;
         }
@@ -1872,7 +1880,9 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
 
     if (hdrOut.destNodeID != BROADCAST_ADDR && (hdrOut.flags & REQ_ACK))
     {
+        Serial.println("STORING ACKNOWLEDGED PACKET");
         RouteEntry re;
+        // This should probably be changed to actual destination rather than just next hop
         if (getRoute(hdrOut.destNodeID, re))
             storeAckPacket(hdrOut.packetID, buffer, offset, re.nextHop);
     }
@@ -2051,25 +2061,62 @@ bool AODVRouter::ackBufferHasPacketID(uint32_t packetID)
     return false;
 }
 
+// void AODVRouter::removeFromACKBuffer(uint32_t packetID)
+// {
+//     Lock l(_mutex);
+//     auto it = ackBuffer.find(packetID);
+//     if (it != ackBuffer.end())
+//     {
+//         // TODO:  verify that the packet came from the expected next hop:
+//         // if (bh.prevHopID == it->second.expectedNextHop)
+//         // {
+//         //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
+//         //     ackBuffer.erase(it);
+//         //     return;
+//         // }
+
+//         Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", packetID);
+//         vPortFree(it->second.packet);
+//         ackBuffer.erase(it);
+//         return;
+//     }
+// }
+
 void AODVRouter::removeFromACKBuffer(uint32_t packetID)
 {
-    Lock l(_mutex);
-    auto it = ackBuffer.find(packetID);
-    if (it != ackBuffer.end())
-    {
-        // TODO:  verify that the packet came from the expected next hop:
-        // if (bh.prevHopID == it->second.expectedNextHop)
-        // {
-        //     Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", bh.packetID);
-        //     ackBuffer.erase(it);
-        //     return;
-        // }
 
-        Serial.printf("[AODVRouter] Implicit ACK received for packet %u\n", packetID);
-        vPortFree(it->second.packet);
+    ackBufferEntry ent;
+    {
+        Lock l(_mutex);
+        auto it = ackBuffer.find(packetID);
+        if (it == ackBuffer.end())
+            return;
+        ent = it->second; // take a copy
         ackBuffer.erase(it);
-        return;
+    } // ---- mutex released
+
+    BaseHeader bh;
+    deserialiseBaseHeader(ent.packet, bh);
+    if (bh.originNodeID == _myNodeID) // we started it
+    {
+        if (bh.packetType == PKT_USER_MSG)
+        {
+            UserMsgHeader uh;
+            deserialiseUserMsgHeader(ent.packet + sizeof(BaseHeader),
+                                     uh, 0);
+            _clientNotifier->notify(
+                Outgoing{BleType::BLE_ACK, /* same op-code as before   */
+                         uh.fromUserID, 0,
+                         nullptr, 0,
+                         packetID});
+        }
+        else /* DATA */
+        {
+            _clientNotifier->notify(
+                Outgoing{BleType::BLE_ACK, 0, 0, nullptr, 0, packetID});
+        }
     }
+    vPortFree(ent.packet);
 }
 
 bool AODVRouter::tryImplicitAck(uint32_t packetID)
