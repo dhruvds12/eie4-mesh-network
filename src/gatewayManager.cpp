@@ -110,9 +110,9 @@ void GatewayManager::syncTask(void *pv)
 
         /* Do ONE “/syncNode” round-trip.  If it returns false
         (HTTP error / JSON parse fail) wait 2 s and retry.         */
-        // if (!self->oneSync())
-        //     Serial.println("oneSync() failed; retrying in 2 s");
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        if (!self->oneSync())
+            Serial.println("oneSync() failed; retrying in 30 s");
+        vTaskDelay(pdMS_TO_TICKS(30000));
     }
 }
 
@@ -206,6 +206,8 @@ bool GatewayManager::oneSync()
         uint32_t src = strtoul(j["src"], nullptr, 10);
         uint32_t dst = strtoul(j["dst"], nullptr, 10);
 
+        uint32_t packetId = (uint32_t)(esp_random());
+
         if (_usm->knowsUser(dst))
         {
             // the user is locally connected
@@ -219,7 +221,8 @@ bool GatewayManager::oneSync()
                     src,
                     std::vector<uint8_t>(
                         (const uint8_t *)txt,
-                        (const uint8_t *)txt + strlen(txt))};
+                        (const uint8_t *)txt + strlen(txt)),
+                    packetId};
 
                 _btMgr->enqueueBleOut(pkt);
             }
@@ -230,11 +233,11 @@ bool GatewayManager::oneSync()
         }
         else
         {
-            Serial.printf("Received gatewat message for user %u\n", dst);
+            Serial.printf("Received gateway message for user %u\n", dst);
             _nmh->enqueueMessage(MsgKind::FROM_GATEWAY,
                                  dst,
                                  (const uint8_t *)txt, txtLen,
-                                 0,
+                                 packetId,
                                  src,
                                  FROM_GATEWAY);
         }

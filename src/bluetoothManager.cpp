@@ -57,7 +57,7 @@ void BluetoothManager::init(const std::string &deviceName)
 
     // Get the advertising object and configure scan response data.
     pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(SERVICE_UUID); 
+    pAdvertising->addServiceUUID(SERVICE_UUID);
     NimBLEAdvertisementData scanResponse;
     scanResponse.setName(deviceName);
     pAdvertising->setScanResponseData(scanResponse);
@@ -642,6 +642,18 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
             payload  // four‐byte LE nodeID
         );
         sendToClient(connHandle, raw);
+
+        if (_gatewayOnline)
+        {
+            Serial.print("Sent Gateway available\n");
+            auto pkt = new BleOut{
+                BleType::BLE_GATEWAY,
+                connHandle,
+                0,
+                _nodeID,
+                std::vector<uint8_t>{1}};
+            enqueueBleOut(pkt);
+        }
         break;
     }
 

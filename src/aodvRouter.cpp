@@ -1820,7 +1820,38 @@ void AODVRouter::flushUserRouteBuffer(uint32_t nodeID)
 void AODVRouter::transmitPacket(const BaseHeader &header,
                                 const uint8_t *extHeader, size_t extLen,
                                 const uint8_t *payload, size_t payloadLen)
+
 {
+
+    if (_mqttManager && _mqttManager->connected)
+    {
+        /* ---- build plaintext copy ----------------------------------- */
+        uint8_t clearBuf[255];
+        size_t clearLen = 0;
+
+        if (sizeof(clearBuf) < sizeof(BaseHeader) + extLen + payloadLen)
+        {
+            Serial.println("[AODV] oversize plaintext pkt");
+            return;
+        }
+
+        BaseHeader hdrClear = header; // no ENC flag
+        clearLen += serialiseBaseHeader(hdrClear, clearBuf);
+
+        if (extHeader && extLen)
+        {
+            memcpy(clearBuf + clearLen, extHeader, extLen);
+            clearLen += extLen;
+        }
+        if (payload && payloadLen)
+        {
+            memcpy(clearBuf + clearLen, payload, payloadLen);
+            clearLen += payloadLen;
+        }
+
+        _mqttManager->publishPacket(hdrClear.packetID, clearBuf, clearLen);
+    }
+
     /* ---- build mutable header with ENC flag -------------------- */
     BaseHeader hdrOut = header;
     hdrOut.flags |= FLAG_ENCRYPTED;
@@ -1868,11 +1899,7 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
 
     offset += plainLen + TAG_LEN; /* final packet length */
 
-    /* ---- hand to radio + bookkeeping (unchanged) ------------------ */
     Serial.printf("[AODVRouer] Added packet with len %u\n", offset);
-    if (_mqttManager && _mqttManager->connected)
-        // TODO: verify is this encrypted
-        _mqttManager->publishPacket(hdrOut.packetID, buffer, offset);
 
     if (!_radioManager->enqueueTxPacket(buffer, offset))
     {
@@ -1885,7 +1912,8 @@ void AODVRouter::transmitPacket(const BaseHeader &header,
         Serial.println("STORING ACKNOWLEDGED PACKET");
         RouteEntry re;
         // This should probably be changed to actual destination rather than just next hop
-        if (getRoute(hdrOut.destNodeID, re)) {
+        if (getRoute(hdrOut.destNodeID, re))
+        {
             storeAckPacket(hdrOut.packetID, buffer, offset, re.nextHop);
         }
     }
@@ -2092,7 +2120,8 @@ void AODVRouter::removeFromACKBuffer(uint32_t packetID)
     {
         Lock l(_mutex);
         auto it = ackBuffer.find(packetID);
-        if (it == ackBuffer.end()) {
+        if (it == ackBuffer.end())
+        {
             Serial.println("Received ack finished early no items found");
             return;
         }
@@ -2110,7 +2139,7 @@ void AODVRouter::removeFromACKBuffer(uint32_t packetID)
             Serial.println("Received ack user msg");
             UserMsgHeader uh;
             deserialiseUserMsgHeader(ent.packet + sizeof(BaseHeader),
-            uh, 0);
+                                     uh, 0);
             Serial.printf("Received ack user msg from ID: %u", uh.fromUserID);
 
             _clientNotifier->notify(

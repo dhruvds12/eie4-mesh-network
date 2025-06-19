@@ -171,28 +171,28 @@ void setup()
 void loop()
 {
 
-// delay(10000);
-// // Example: print the number of connected clients.
-// uint8_t n = btManager->getServer()->getConnectedCount();
-// Serial.printf("Connected count: %u\n", n);
+  // delay(10000);
+  // // Example: print the number of connected clients.
+  // uint8_t n = btManager->getServer()->getConnectedCount();
+  // Serial.printf("Connected count: %u\n", n);
 
-// if (n)
-// {
-//   std::string message = "bye";
-//   bool ok = btManager->sendBroadcast(message);
-//   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
-// }
+  // if (n)
+  // {
+  //   std::string message = "bye";
+  //   bool ok = btManager->sendBroadcast(message);
+  //   Serial.printf("notify(): %s\n", ok ? "ok" : "failed");
+  // }
 
-// static unsigned long lastPublishTime = 0;
-// if (millis() - lastPublishTime > 5000)
-// {
-//   lastPublishTime = millis();
-//   mqttManager->publishMessage("hardware/to/simulation", "Hardware Status: Idle");
-//   Serial.println("Published hardware status");
-// }
-// delay(100);
-// #ifdef INITIATING_NODE   // only the STA node that has Wi-Fi
-//   gwMgr->broadcastUtc(); // now fetches + sends in one call
-// #endif
-//   delay(5000);
+  // static unsigned long lastPublishTime = 0;
+  // if (millis() - lastPublishTime > 5000)
+  // {
+  //   lastPublishTime = millis();
+  //   mqttManager->publishMessage("hardware/to/simulation", "Hardware Status: Idle");
+  //   Serial.println("Published hardware status");
+  // }
+  // delay(100);
+  // #ifdef INITIATING_NODE   // only the STA node that has Wi-Fi
+  //   gwMgr->broadcastUtc(); // now fetches + sends in one call
+  // #endif
+  //   delay(5000);
 }
