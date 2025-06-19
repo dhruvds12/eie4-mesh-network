@@ -119,6 +119,8 @@ private:
 
         /* --- PCSMA defer slot --------------------------------------- */
         uint32_t deferSlotMs = 300;
+
+        uint16_t ifsMs      = 100;
     };
 
     // Give every node its own copy that users can patch at run-time

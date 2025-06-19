@@ -596,6 +596,7 @@ void RadioManager::txTask(void *pvParameteres)
             {
                 mgr->_radio->setDio1Callback(mgr->dio1Isr);
                 Serial.printf("[RadioManager] TX OK len=%u\n", pkt->len);
+                // vTaskDelay(pdMS_TO_TICKS(mgr->csma.ifsMs));
             }
             else
             {
@@ -606,7 +607,7 @@ void RadioManager::txTask(void *pvParameteres)
             }
             sent = true; // leave CSMA loop regardless of rc
         }
-
+        
         vPortFree(pkt);
     }
 }

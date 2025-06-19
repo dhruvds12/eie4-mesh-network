@@ -558,7 +558,9 @@ void BluetoothManager::processIncomingMessage(uint16_t connHandle, const std::st
                            q.to,
                            q.from,
                            q.data.data(),
-                           q.data.size()};
+                           q.data.size(),
+                           q.packetId
+                        };
                 notify(o);
             }
         }

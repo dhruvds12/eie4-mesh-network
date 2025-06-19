@@ -924,6 +924,9 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.originNodeID, actualData, actualDataLen, base.packetID});
+        displayManager.showMsg(base.originNodeID,
+                               reinterpret_cast<const char *>(actualData),
+                               actualDataLen);
         return;
     }
 
@@ -938,12 +941,15 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
         Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen, base.packetID});
-        {
-            char buf[32] = {0}; // always NUL-term
-            size_t n = (actualDataLen > 31) ? 31 : actualDataLen;
-            memcpy(buf, actualData, n);       // copy only payload
-            displayManager.post(String(buf)); // safe
-        }
+        // {
+        //     char buf[32] = {0}; // always NUL-term
+        //     size_t n = (actualDataLen > 31) ? 31 : actualDataLen;
+        //     memcpy(buf, actualData, n);       // copy only payload
+        //     displayManager.post(String(buf)); // safe
+        // }
+        displayManager.showMsg(base.originNodeID,
+                               reinterpret_cast<const char *>(actualData),
+                               actualDataLen);
         fwd.destNodeID = BROADCAST_ADDR;
     }
     else
@@ -1447,7 +1453,7 @@ void AODVRouter::handleMoveUserReq(const BaseHeader &base, const uint8_t *payloa
     /* ── this IS the old node – forward inbox to the new node ── */
     std::vector<OfflineMsg> msgs;
     _usm->popInbox(mvr.userID, msgs);
-
+    const uint16_t GAP_MS = 1000; 
     for (const auto &om : msgs)
     {
         sendUserMessage(om.from,
@@ -1456,6 +1462,8 @@ void AODVRouter::handleMoveUserReq(const BaseHeader &base, const uint8_t *payloa
                         om.data.size(),
                         om.packetId,
                         (om.type == BleType::BLE_ENC_UnicastUser) ? ENC_MSG : 0);
+
+        vTaskDelay(pdMS_TO_TICKS(GAP_MS));
     }
 
     _usm->remove(mvr.userID);

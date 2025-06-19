@@ -95,9 +95,9 @@ void setup()
   // aodvRouter->getKnownUserIDs();
 
   // Initialise display if needed
-  displayManager.initialise();
+  displayManager.initialise(getNodeID());
   delay(100);
-  displayManager.post("Started Correctly, HI");
+  // displayManager.post("Started Correctly, HI");
 
   // First, scan and print available WiFi networks.
   Serial.println("Scanning for available WiFi networks...");
@@ -111,17 +111,21 @@ void setup()
 
   // Then attempt to connect to the network using the credentials from wifiConfig.h.
   bool wifiConnected = wifiConnect(ssid, password);
+  displayManager.setWifi(wifiConnected);
   if (wifiConnected)
     gwMgr->onWifiUp();
 
   WiFi.onEvent([](WiFiEvent_t e)
                {
       if (!gwMgr) return;
-      if (e==ARDUINO_EVENT_WIFI_STA_CONNECTED ||
-          e==ARDUINO_EVENT_WIFI_STA_GOT_IP)
+      if (e==ARDUINO_EVENT_WIFI_STA_CONNECTED || e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
           gwMgr->onWifiUp();
-      else if (e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)
-          gwMgr->onWifiDown(); });
+          displayManager.setWifi(true);
+      }
+      else if (e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
+          gwMgr->onWifiDown(); 
+          displayManager.setWifi(false);
+        } });
 
   // Create the MQTTManager instance with the dynamically built subscribe topic.
   mqttManager = new MQTTManager("mqtt://132.145.67.221:1883", getNodeID(), &radioManager, networkMessageHandler);
