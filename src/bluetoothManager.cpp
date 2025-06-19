@@ -57,6 +57,7 @@ void BluetoothManager::init(const std::string &deviceName)
 
     // Get the advertising object and configure scan response data.
     pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID); 
     NimBLEAdvertisementData scanResponse;
     scanResponse.setName(deviceName);
     pAdvertising->setScanResponseData(scanResponse);
