@@ -922,7 +922,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
+        Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Node, dataHeader.finalDestID, base.originNodeID, actualData, actualDataLen, base.packetID});
         return;
     }
@@ -936,7 +936,7 @@ void AODVRouter::handleData(const BaseHeader &base, const uint8_t *payload, size
         // TODO: need to properly extract the data without the header
         Serial.printf("[AODVRouter] Received DATA for me. PayloadLen=%u\n", (unsigned)payloadLen);
         Serial.printf("[AODVRouter] Data: %.*s\n", (int)actualDataLen, (const char *)actualData);
-        Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
+        Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
         _clientNotifier->notify(Outgoing{BleType::BLE_Broadcast, 0, 0, actualData, actualDataLen, base.packetID});
         {
             char buf[32] = {0}; // always NUL-term
@@ -1114,7 +1114,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     _usm->queueOffline(umh.toUserID, om);
                     return; // nothing else to do now
                 }
-                Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
+                Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
                 _clientNotifier->notify(Outgoing{BleType::BLE_USER_GATEWAY, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
                 return;
             }
@@ -1137,7 +1137,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                     _usm->queueOffline(umh.toUserID, om);
                     return; // nothing else to do now
                 }
-                Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
+                Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
                 _clientNotifier->notify(Outgoing{BleType::BLE_ENC_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
                 return;
             }
@@ -1160,7 +1160,7 @@ void AODVRouter::handleUserMessage(const BaseHeader &base, const uint8_t *payloa
                 _usm->queueOffline(umh.toUserID, om);
                 return; // nothing else to do now
             }
-            Serial.printf("[AODVRouter] PACKET ID: %u", base.packetID);
+            Serial.printf("[AODVRouter] PACKET ID: %u\n", base.packetID);
             _clientNotifier->notify(Outgoing{BleType::BLE_UnicastUser, umh.toUserID, umh.fromUserID, message, messageLen, base.packetID});
             return;
         }

@@ -91,6 +91,38 @@ private:
 
     // Helper method ot handle the completion of a transmission
     void handleTransmissionComplete();
+
+    struct CsmaOptions
+    {
+        enum class BackoffScheme
+        {
+            Legacy,
+            Binary,
+            BE
+        };
+
+        BackoffScheme scheme = BackoffScheme::Legacy; // choose at run-time
+        bool pcsmaEnabled = false;                    ///< coin-flip gating
+        float pTransmit = 1.00f;                      ///< 0…1   (only if pcsmaEnabled)
+
+        /* --- LEGACY  (uniform 5–50 ms, unchanged) ------------------- */
+        uint32_t legacyMinMs = 5;
+        uint32_t legacyMaxMs = 50;
+
+        /* --- BINARY  (doubling window) ------------------------------ */
+        uint32_t binInitMs = 10;
+        uint32_t binMaxMs = 2000;
+
+        /* --- BE  (BEB/802.15.4-style) ------------------------------- */
+        uint32_t beUnitMs = 10; ///< length of one “slot”
+        uint8_t beMaxExp = 5;   ///< clamp exponent
+
+        /* --- PCSMA defer slot --------------------------------------- */
+        uint32_t deferSlotMs = 300;
+    };
+
+    // Give every node its own copy that users can patch at run-time
+    CsmaOptions csma{};
 };
 
 #endif // RADIOMANAGER_H
