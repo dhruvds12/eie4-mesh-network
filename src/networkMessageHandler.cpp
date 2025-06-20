@@ -41,9 +41,10 @@ NetworkMessageHandler::~NetworkMessageHandler()
     }
 }
 
-bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destID, const uint8_t *data, size_t len, uint32_t userID, uint8_t flags)
+bool NetworkMessageHandler::enqueueMessage(MsgKind kind, uint32_t destID, const uint8_t *data, size_t len, uint32_t packetId, uint32_t userID, uint8_t flags)
 {
     OutgoingMessage msg{};
+    msg.packetId = packetId;
     msg.kind = kind;
     msg.flags = flags;
     msg.destID = destID;
@@ -82,6 +83,7 @@ void NetworkMessageHandler::processQueue()
                 _router->sendData(msg.destID,
                                   msg.message,
                                   msg.length,
+                                  msg.packetId,
                                   msg.flags);
             }
             else if (msg.kind == MsgKind::USER || msg.kind == MsgKind::FROM_GATEWAY)
@@ -90,6 +92,7 @@ void NetworkMessageHandler::processQueue()
                                          msg.destID,
                                          msg.message,
                                          msg.length,
+                                         msg.packetId,
                                          msg.flags);
             }
             else if (msg.kind == MsgKind::TO_GATEWAY && _gwMgr)
@@ -108,6 +111,7 @@ void NetworkMessageHandler::processQueue()
                                                  msg.destID,
                                                  msg.message,
                                                  msg.length,
+                                                 msg.packetId,
                                                  msg.flags);
                     }
                     else
@@ -129,6 +133,7 @@ void NetworkMessageHandler::processQueue()
                                          msg.destID,
                                          msg.message,
                                          msg.length,
+                                         msg.packetId,
                                          msg.flags);
             }
             else if (msg.kind == MsgKind::MOVE_USER_REQ)

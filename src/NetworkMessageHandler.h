@@ -23,6 +23,7 @@ enum class MsgKind : uint8_t
 
 struct OutgoingMessage
 {
+    uint32_t packetId;
     MsgKind kind;
     uint8_t flags;   // still carries FROM_GATEWAY / TO_GATEWAY bits
     uint32_t destID; // node-ID *or* user-ID (see kind)
@@ -50,7 +51,7 @@ public:
      * @return true
      * @return false
      */
-    bool enqueueMessage(MsgKind kind, uint32_t destID,const uint8_t* data, size_t len, uint32_t userID = 0, uint8_t flags = 0);
+    bool enqueueMessage(MsgKind kind, uint32_t destID, const uint8_t *data, size_t len, uint32_t packetId = 0, uint32_t userID = 0, uint8_t flags = 0);
 
     void announcePubKey(uint32_t userID, const uint8_t pk[32]);
 

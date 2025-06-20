@@ -456,70 +456,158 @@ void RadioManager::handleTransmissionComplete()
 //     }
 // }
 
+// void RadioManager::txTask(void *pvParameteres)
+// {
+//     RadioManager *manager = reinterpret_cast<RadioManager *>(pvParameteres);
+
+//     // ets_random_seed(xthal_get_ccount());
+
+//     for (;;)
+//     {
+//         //  Wait for a new packet to appear
+//         RadioPacket *packet = nullptr;
+//         if (xQueueReceive(manager->_txQueue, &packet, portMAX_DELAY) != pdTRUE)
+//         {
+//             continue;
+//         }
+
+//         const uint32_t BACKOFF_MIN_MS = 5;
+//         const uint32_t BACKOFF_MAX_MS = 50;
+//         const TickType_t COOLDOWN_TICKS = pdMS_TO_TICKS(10);
+
+//         //  Wait until any prior TX is fully done.
+//         //  Instead of polling with a 2 ms delay, we block on _txDoneSemaphore.
+//         //  If _isTransmitting is false right now, semaphore take should succeed immediately.
+//         if (manager->_isTransmitting)
+//         {
+//             // Block indefinitely until ISR gives us “TX finished.”
+//             xSemaphoreTake(manager->_txDoneSemaphore, portMAX_DELAY);
+//         }
+
+//         //  Now _isTransmitting is guaranteed false. Next, back off until channel is free.
+//         while (!manager->_radio->isChannelFree())
+//         {
+//             uint32_t rnd = BACKOFF_MIN_MS + (esp_random() % (BACKOFF_MAX_MS - BACKOFF_MIN_MS + 1));
+//             vTaskDelay(pdMS_TO_TICKS(rnd));
+//         }
+
+//         // The radio needs some time to swap to transmit otherwise the packet gets lost
+//         vTaskDelay(pdMS_TO_TICKS(2));
+
+//         //  Channel is free AND no TX in flight → kick off our new send.
+//         manager->_isTransmitting = true;
+//         int status = manager->_radio->startTransmit(packet->data, packet->len);
+//         if (status == 0)
+//         {
+//             // Arrange to get the DIO1 interrupt on TX‐done
+//             manager->_radio->setDio1Callback(manager->dio1Isr);
+//             Serial.printf("[RadioManager] Transmitted Packet: Length %u\n", packet->len);
+//         }
+//         else
+//         {
+//             // Immediate TX failure → drop back to RX and clear the flag
+//             manager->_radio->setDio1Callback(manager->dio1Isr);
+//             Serial.print("[RadioManager] TX failed, code: ");
+//             Serial.println(status);
+//             manager->_isTransmitting = false;
+//             manager->_radio->startReceive();
+//             // Also “give” the TX‐done semaphore so that if anyone else is waiting, they wake up
+//             xSemaphoreGive(manager->_txDoneSemaphore);
+//         }
+
+//         //  We’ve handed the packet off (or dropped it). Free its memory.
+//         vPortFree(packet);
+
+//         //  Enforce a 10 ms cool‐down before trying the next send
+//         //  (even if channel is free immediately, we delay 10 ms.)
+//         // vTaskDelay(COOLDOWN_TICKS);
+//     }
+// }
+
 void RadioManager::txTask(void *pvParameteres)
 {
-    RadioManager *manager = reinterpret_cast<RadioManager *>(pvParameteres);
-
-    // ets_random_seed(xthal_get_ccount());
+    RadioManager *mgr = reinterpret_cast<RadioManager *>(pvParameteres);
 
     for (;;)
     {
-        //  Wait for a new packet to appear
-        RadioPacket *packet = nullptr;
-        if (xQueueReceive(manager->_txQueue, &packet, portMAX_DELAY) != pdTRUE)
+
+        RadioPacket *pkt = nullptr;
+        if (xQueueReceive(mgr->_txQueue, &pkt, portMAX_DELAY) != pdTRUE)
+            continue; // nothing to do
+
+        if (mgr->_isTransmitting)
+            xSemaphoreTake(mgr->_txDoneSemaphore, portMAX_DELAY);
+
+        TickType_t backoffBin = pdMS_TO_TICKS(mgr->csma.binInitMs);
+        uint8_t beExp = 2;
+        bool sent = false;
+
+        while (!sent)
         {
-            continue;
+            /*  busy? → choose a back-off ---------------------- */
+            if (!mgr->_radio->isChannelFree())
+            {
+                TickType_t waitTicks = 0;
+
+                switch (mgr->csma.scheme)
+                {
+                case CsmaOptions::BackoffScheme::Binary:
+                {
+                    uint32_t rnd = esp_random() % (backoffBin / portTICK_PERIOD_MS + 1);
+                    waitTicks = pdMS_TO_TICKS(rnd);
+                    backoffBin = std::min(backoffBin * 2, pdMS_TO_TICKS(mgr->csma.binMaxMs));
+                    break;
+                }
+                case CsmaOptions::BackoffScheme::BE:
+                {
+                    if (beExp > mgr->csma.beMaxExp)
+                        beExp = mgr->csma.beMaxExp;
+                    uint32_t slot = esp_random() % (1u << beExp);
+                    waitTicks = pdMS_TO_TICKS(slot * mgr->csma.beUnitMs);
+                    ++beExp;
+                    break;
+                }
+                default: /* legacy uniform 5–50 ms */
+                    waitTicks = pdMS_TO_TICKS(mgr->csma.legacyMinMs + esp_random() % (mgr->csma.legacyMaxMs - mgr->csma.legacyMinMs + 1));
+                }
+
+                vTaskDelay(waitTicks);
+                continue; // retry CCA afterwards
+            }
+
+            /*  channel looks idle – optional PCSMA coin-flip -- */
+            if (mgr->csma.pcsmaEnabled)
+            {
+                float r = esp_random() / static_cast<float>(UINT32_MAX);
+                if (r > mgr->csma.pTransmit)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(mgr->csma.deferSlotMs));
+                    continue; // defer one slot, retry
+                }
+            }
+
+            /*  guard time RX→TX  ---------- */
+            vTaskDelay(pdMS_TO_TICKS(2));
+
+            /*  fire the real transmit ------------------------ */
+            mgr->_isTransmitting = true;
+            int rc = mgr->_radio->startTransmit(pkt->data, pkt->len);
+            if (rc == 0)
+            {
+                mgr->_radio->setDio1Callback(mgr->dio1Isr);
+                Serial.printf("[RadioManager] TX OK len=%u\n", pkt->len);
+                // vTaskDelay(pdMS_TO_TICKS(mgr->csma.ifsMs));
+            }
+            else
+            {
+                Serial.printf("[RadioManager] TX fail rc=%d – drop\n", rc);
+                mgr->_isTransmitting = false;
+                mgr->_radio->startReceive();
+                xSemaphoreGive(mgr->_txDoneSemaphore); // unblock waiters
+            }
+            sent = true; // leave CSMA loop regardless of rc
         }
-
-        const uint32_t BACKOFF_MIN_MS = 5;
-        const uint32_t BACKOFF_MAX_MS = 50;
-        const TickType_t COOLDOWN_TICKS = pdMS_TO_TICKS(10);
-
-        //  Wait until any prior TX is fully done.
-        //  Instead of polling with a 2 ms delay, we block on _txDoneSemaphore.
-        //  If _isTransmitting is false right now, semaphore take should succeed immediately.
-        if (manager->_isTransmitting)
-        {
-            // Block indefinitely until ISR gives us “TX finished.”
-            xSemaphoreTake(manager->_txDoneSemaphore, portMAX_DELAY);
-        }
-
-        //  Now _isTransmitting is guaranteed false. Next, back off until channel is free.
-        while (!manager->_radio->isChannelFree())
-        {
-            uint32_t rnd = BACKOFF_MIN_MS + (esp_random() % (BACKOFF_MAX_MS - BACKOFF_MIN_MS + 1));
-            vTaskDelay(pdMS_TO_TICKS(rnd));
-        }
-
-        // The radio needs some time to swap to transmit otherwise the packet gets lost
-        vTaskDelay(pdMS_TO_TICKS(2)); 
-
-        //  Channel is free AND no TX in flight → kick off our new send.
-        manager->_isTransmitting = true;
-        int status = manager->_radio->startTransmit(packet->data, packet->len);
-        if (status == 0)
-        {
-            // Arrange to get the DIO1 interrupt on TX‐done
-            manager->_radio->setDio1Callback(manager->dio1Isr);
-            Serial.printf("[RadioManager] Transmitted Packet: Length %u\n", packet->len);
-        }
-        else
-        {
-            // Immediate TX failure → drop back to RX and clear the flag
-            manager->_radio->setDio1Callback(manager->dio1Isr);
-            Serial.print("[RadioManager] TX failed, code: ");
-            Serial.println(status);
-            manager->_isTransmitting = false;
-            manager->_radio->startReceive();
-            // Also “give” the TX‐done semaphore so that if anyone else is waiting, they wake up
-            xSemaphoreGive(manager->_txDoneSemaphore);
-        }
-
-        //  We’ve handed the packet off (or dropped it). Free its memory.
-        vPortFree(packet);
-
-        //  Enforce a 10 ms cool‐down before trying the next send
-        //  (even if channel is free immediately, we delay 10 ms.)
-        // vTaskDelay(COOLDOWN_TICKS);
+        
+        vPortFree(pkt);
     }
 }

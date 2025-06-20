@@ -15,7 +15,10 @@ enum class BleType : uint8_t
     BLE_ACK,
     BLE_PUBKEY_RESP,
     BLE_ENC_UnicastUser,
-    BLE_NODE_ID
+    BLE_NODE_ID,
+    BLE_ACK_FAILURE,      /* node → phone: delivery failed            */
+    BLE_USER_MSG_REQ_ACK, /* phone → node: user msg wants ACK         */
+    BLE_NODE_MSG_REQ_ACK
 };
 
 struct Outgoing
