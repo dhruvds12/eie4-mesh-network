@@ -1,6 +1,6 @@
 # eie4-mesh-network
 
-Please see [Wiki](https://github.com/dhruvds12/eie4-mesh-network/wiki) for further details and videos
+Please see [Wiki](https://github.com/dhruvds12/eie4-mesh-network/wiki) for further details and videos.
 
 This repository contains the code for the **Mesh Network for Natural Disaster Recovery** project. 
 
